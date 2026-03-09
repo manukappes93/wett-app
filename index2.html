@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>Wett-Tipp Analyse</title>
+
+  <!-- iPhone Vollbild & Titel -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Wett-Tipps">
+
+  <!-- App-Icon -->
+  <link rel="apple-touch-icon" href="icon.png">
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 40px;
+      max-width: 900px;
+    }
+
+    textarea {
+      width: 100%;
+      height: 350px;
+      font-size: 16px;
+      padding: 12px;
+      box-sizing: border-box;
+      resize: vertical;
+    }
+
+    button {
+      padding: 10px 20px;
+      font-size: 18px;
+      cursor: pointer;
+      margin-top: 20px;
+      margin-right: 10px;
+    }
+
+    .entry {
+      margin-top: 25px;
+      padding: 15px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      background: #f7f7f7;
+    }
+
+    .tip-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px;
+      border-radius: 6px;
+      margin-bottom: 6px;
+      background: #ffffff;
+      border: 1px solid #ccc;
+      width: fit-content;
+      transition: background-color 0.3s ease;
+    }
+
+    .quote-input {
+      width: 70px;
+      padding: 4px;
+      font-size: 14px;
+      border: 1px solid #aaa;
+      border-radius: 4px;
+    }
+
+    #statsOverlay,
+    #loadOverlay,
+    #deleteOverlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(4px);
+      z-index: 9999;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .stats-box,
+    .load-box {
+      background: white;
+      padding: 25px;
+      border-radius: 12px;
+      width: 80%;
+      max-width: 400px;
+      text-align: center;
+    }
+
+    select {
+      padding: 8px;
+      font-size: 16px;
+      margin-bottom: 15px;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Spielpaarungen & Wett-Tipps analysieren</h1>
+
+  <textarea id="textInput" placeholder="Hier deinen Text einfügen..."></textarea>
+
+  <button id="readButton">Text einlesen</button>
+  <button id="showStats">Statistik</button>
+  <button id="saveDay">Speichern</button>
+  <button id="loadDay">Laden</button>
+  <button id="deleteDay">Tag löschen</button>
+
+  <div id="output"></div>
+
+  <!-- Statistik-Overlay -->
+  <div id="statsOverlay">
+    <div class="stats-box">
+      <h2>Statistik</h2>
+      <p id="statCorrect">✔️ Richtig: 0</p>
+      <p id="statWrong">❌ Falsch: 0</p>
+      <p id="statNeutral">➖ Dunkelgrau: 0</p>
+      <p id="statReset">⭯ Weiß: 0</p>
+      <button id="closeStats">Schließen</button>
+    </div>
+  </div>
+
+  <!-- Laden-Overlay -->
+  <div id="loadOverlay">
+    <div class="load-box">
+      <h2>Gespeicherte Tage</h2>
+      <select id="daySelect"></select>
+      <br>
+      <button id="loadSelectedDay">Laden</button>
+      <button id="closeLoad">Schließen</button>
+    </div>
+  </div>
+
+  <!-- Löschen-Overlay -->
+  <div id="deleteOverlay">
+    <div class="load-box">
+      <h2>Tag löschen</h2>
+      <select id="deleteSelect"></select>
+      <br>
+      <button id="deleteSelectedDay">Löschen</button>
+      <button id="closeDelete">Schließen</button>
+    </div>
+  </div>
+
+  <script>
+    const output = document.getElementById("output");
+    const statsOverlay = document.getElementById("statsOverlay");
+    const loadOverlay = document.getElementById("loadOverlay");
+    const deleteOverlay = document.getElementById("deleteOverlay");
+    const statCorrect = document.getElementById("statCorrect");
+    const statWrong = document.getElementById("statWrong");
+    const statNeutral = document.getElementById("statNeutral");
+    const statReset = document.getElementById("statReset");
+
+    let currentEntries = []; // [{country, match, tips:[{label,value,quote,color}]}]
+
+    function today() {
+      return new Date().toISOString().split("T")[0];
+    }
+
+    function updateStats() {
+      let correct = 0, wrong = 0, neutral = 0, reset = 0;
+
+      currentEntries.forEach(entry => {
+        entry.tips.forEach(tip => {
+          const c = tip.color || "#ffffff";
+          if (c === "#c8ffcc") correct++;
+          else if (c === "#ffcccc") wrong++;
+          else if (c === "#2b2b2b") neutral++;
+          else reset++;
+        });
+      });
+
+      statCorrect.textContent = "✔️ Richtig: " + correct;
+      statWrong.textContent = "❌ Falsch: " + wrong;
+      statNeutral.textContent = "➖ Dunkelgrau: " + neutral;
+      statReset.textContent = "⭯ Weiß: " + reset;
+    }
+
+    function renderEntries() {
+      output.innerHTML = "";
+
+      currentEntries.forEach((entry, ei) => {
+        const div = document.createElement("div");
+        div.className = "entry";
+
+        const h2 = document.createElement("h2");
+        h2.textContent = entry.country || "";
+        div.appendChild(h2);
+
+        const p = document.createElement("p");
+        p.innerHTML = "<strong>Spielpaarung:</strong> " + (entry.match || "");
+        div.appendChild(p);
+
+        entry.tips.forEach((tip, ti) => {
+          const row = document.createElement("div");
+          row.className = "tip-row";
+          row.dataset.entryIndex = ei;
+          row.dataset.tipIndex = ti;
+
+          row.innerHTML = `
+            <span><strong>${tip.label}:</strong> ${tip.value}</span>
+            <input type="number" step="0.01" class="quote-input" placeholder="Quote">
+            <button class="btn-correct">✔️</button>
+            <button class="btn-wrong">❌</button>
+            <button class="btn-neutral">➖</button>
+            <button class="btn-reset">⭯</button>
+          `;
+
+          const quoteInput = row.querySelector(".quote-input");
+          quoteInput.value = tip.quote || "";
+
+          row.style.backgroundColor = tip.color || "#ffffff";
+
+          const correctBtn = row.querySelector(".btn-correct");
+          const wrongBtn = row.querySelector(".btn-wrong");
+          const neutralBtn = row.querySelector(".btn-neutral");
+          const resetBtn = row.querySelector(".btn-reset");
+
+          correctBtn.onclick = () => {
+            tip.color = "#c8ffcc";
+            row.style.backgroundColor = tip.color;
+            updateStats();
+          };
+          wrongBtn.onclick = () => {
+            tip.color = "#ffcccc";
+            row.style.backgroundColor = tip.color;
+            updateStats();
+          };
+          neutralBtn.onclick = () => {
+            tip.color = "#2b2b2b";
+            row.style.backgroundColor = tip.color;
+            updateStats();
+          };
+          resetBtn.onclick = () => {
+            tip.color = "#ffffff";
+            row.style.backgroundColor = tip.color;
+            updateStats();
+          };
+
+          quoteInput.oninput = () => {
+            tip.quote = quoteInput.value;
+          };
+
+          div.appendChild(row);
+        });
+
+        output.appendChild(div);
+      });
+
+      updateStats();
+    }
+
+    document.getElementById("showStats").onclick = () => {
+      updateStats();
+      statsOverlay.style.display = "flex";
+    };
+
+    document.getElementById("closeStats").onclick = () => {
+      statsOverlay.style.display = "none";
+    };
+
+    document.getElementById("readButton").onclick = () => {
+      const raw = document.getElementById("textInput").value.trim();
+      currentEntries = [];
+
+      if (!raw) {
+        output.textContent = "Es wurde kein Text eingegeben.";
+        return;
+      }
+
+      const blocks = raw
+        .split(/[\=≠]{5,}/g)
+        .map(b => b.trim())
+        .filter(b => b.length > 0);
+
+      blocks.forEach(block => {
+        const lines = block.split("\n").map(l => l.trim()).filter(l => l);
+
+        let country = "", match = "", htTip = "", ftTip = "", correctScore = "", bothTeams = "";
+
+        lines.forEach((line, idx) => {
+          if (/°{3,}/.test(line)) {
+            const prev = lines[idx - 1] || "";
+            country = prev.replace(/▶/g, "").trim();
+          }
+        });
+
+        lines.forEach(line => {
+          if (line.includes("🆚")) {
+            match = line.replace(/▶/g, "").trim();
+          }
+
+          if (/▶\s*[0-9Xx]\s*\/\s*[0-9Xx]/.test(line)) {
+            const clean = line.replace(/▶/g, "").trim();
+            const parts = clean.split("/");
+            htTip = parts[0].trim();
+            ftTip = parts[1].trim();
+          }
+
+          if (/Correct/i.test(line) && /(\d+[:;]\d+)/.test(line)) {
+            correctScore = line.match(/(\d+[:;]\d+)/)[0].replace(";", ":");
+          }
+
+          if (/Both team yes/i.test(line)) {
+            bothTeams = "Ja";
+          }
+        });
+
+        const tips = [];
+
+        if (htTip) tips.push({ label: "HT Tipp", value: htTip, quote: "", color: "#ffffff" });
+        if (ftTip) tips.push({ label: "FT Tipp", value: ftTip, quote: "", color: "#ffffff" });
+        if (correctScore) tips.push({ label: "Genaues Ergebnis", value: correctScore, quote: "", color: "#ffffff" });
+        if (bothTeams) tips.push({ label: "Beide Teams treffen", value: "Ja", quote: "", color: "#ffffff" });
+
+        currentEntries.push({
+          country,
+          match,
+          tips
+        });
+      });
+
+      renderEntries();
+    };
+
+    document.getElementById("saveDay").onclick = () => {
+      if (!currentEntries.length) {
+        alert("Keine Daten zum Speichern vorhanden.");
+        return;
+      }
+
+      const day = today();
+      const savedDays = JSON.parse(localStorage.getItem("savedDays") || "[]");
+
+      if (savedDays.includes(day)) {
+        alert("Für heute (" + day + ") existieren bereits gespeicherte Daten. Bitte zuerst löschen.");
+        return;
+      }
+
+      const newSavedDays = [...savedDays, day];
+      localStorage.setItem("savedDays", JSON.stringify(newSavedDays));
+      localStorage.setItem("day-" + day, JSON.stringify(currentEntries));
+
+      currentEntries = [];
+      renderEntries();
+      alert("Gespeichert unter: " + day);
+    };
+
+    document.getElementById("loadDay").onclick = () => {
+      const savedDays = JSON.parse(localStorage.getItem("savedDays") || "[]");
+      const select = document.getElementById("daySelect");
+      select.innerHTML = "";
+
+      savedDays.forEach(d => {
+        const opt = document.createElement("option");
+        opt.value = d;
+        opt.textContent = d;
+        select.appendChild(opt);
+      });
+
+      loadOverlay.style.display = "flex";
+    };
+
+    document.getElementById("closeLoad").onclick = () => {
+      loadOverlay.style.display = "none";
+    };
+
+    document.getElementById("loadSelectedDay").onclick = () => {
+      const day = document.getElementById("daySelect").value;
+      if (!day) return;
+
+      const data = JSON.parse(localStorage.getItem("day-" + day) || "[]");
+      currentEntries = data;
+      renderEntries();
+      loadOverlay.style.display = "none";
+    };
+
+    document.getElementById("deleteDay").onclick = () => {
+      const savedDays = JSON.parse(localStorage.getItem("savedDays") || "[]");
+      const select = document.getElementById("deleteSelect");
+      select.innerHTML = "";
+
+      savedDays.forEach(d => {
+        const opt = document.createElement("option");
+        opt.value = d;
+        opt.textContent = d;
+        select.appendChild(opt);
+      });
+
+      deleteOverlay.style.display = "flex";
+    };
+
+    document.getElementById("closeDelete").onclick = () => {
+      deleteOverlay.style.display = "none";
+    };
+
+    document.getElementById("deleteSelectedDay").onclick = () => {
+      const day = document.getElementById("deleteSelect").value;
+      if (!day) return;
+
+      let savedDays = JSON.parse(localStorage.getItem("savedDays") || "[]");
+      savedDays = savedDays.filter(d => d !== day);
+      localStorage.setItem("savedDays", JSON.stringify(savedDays));
+      localStorage.removeItem("day-" + day);
+
+      alert("Tag gelöscht: " + day);
+      deleteOverlay.style.display = "none";
+    };
+  </script>
+</body>
+</html>
