@@ -95,6 +95,84 @@
   font-weight: bold;
 }
 
+.search-close-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.search-input {
+  flex: 1;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: 16px;
+}
+
+.top-close {
+  padding: 10px 15px;
+  background: #d9534f;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.top-close:hover {
+  background: #c9302c;
+}
+
+.edit-country {
+  cursor: pointer;
+  margin-left: 8px;
+  font-size: 18px;
+  opacity: 0.7;
+}
+
+.edit-country:hover {
+  opacity: 1;
+}
+
+.tip-ampel {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 8px;
+  border: 1px solid #666;
+}
+
+.tip-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.quote-input {
+  width: 80px;        /* feste Breite */
+  font-size: 18px;
+  font-weight: bold;
+  text-align: center;
+}
+
+.profit-display {
+  width: 90px;        /* feste Breite */
+  font-size: 18px;
+  font-weight: bold;
+  text-align: center;
+  display: inline-block;
+}
+
+.tip-label {
+  display: inline-block;
+  width: 160px;   /* hier kannst du anpassen */
+  font-weight: bold;
+}
+
   </style>
 </head>
 
@@ -107,12 +185,11 @@ settings/baseStake
   <textarea id="textInput" placeholder="Hier deinen Text einfügen..."></textarea>
 
   <button id="readButton">Text einlesen</button>
-  <button id="sortButton">Reihenfolge aktualisieren</button>
+  <button id="saveDay">Speichern</button>
+   <button id="loadDay">Laden</button>
+   <button id="deleteDay">Tag löschen</button>
   <button id="showStats">Statistik</button>
   <button id="btnCountryStats" class="stats-button">🌍 GesamtBilanz</button>
-  <button id="saveDay">Speichern</button>
-  <button id="loadDay">Laden</button>
-  <button id="deleteDay">Tag löschen</button>
 
   <div style="margin-top:20px;">
     <label for="baseStake" style="font-size:18px; font-weight:bold;">Grundeinsatz pro Wette:</label>
@@ -170,11 +247,15 @@ settings/baseStake
   <div class="overlay-content">
     <h2>Gesamtbilanz nach Ländern</h2>
 
-    <input 
-      type="text" 
-      id="countrySearch" 
-      placeholder="Land suchen..." 
-      class="search-input">
+<div class="search-close-row">
+  <input 
+    type="text" 
+    id="countrySearch" 
+    placeholder="Land suchen..." 
+    class="search-input">
+
+  <button id="closeCountryStats" class="close-button top-close">Schließen</button>
+</div>
 
     <div id="countryStatsContent"></div>
 
@@ -188,6 +269,8 @@ settings/baseStake
 ============================ */
 let currentEntries = [];
 let isTimePickerOpen = false;
+let countryStatsDetailed = {};
+
 
 const output = document.getElementById("output");
 const baseStakeInput = document.getElementById("baseStake");
@@ -465,9 +548,12 @@ timeInput.addEventListener("blur", () => {
     cd.textContent = "–";
     div.appendChild(cd);
 
-    const h2 = document.createElement("h2");
-    h2.textContent = entry.country || "";
-    div.appendChild(h2);
+const h2 = document.createElement("h2");
+h2.innerHTML = `
+  <span class="country-text">${entry.country || ""}</span>
+  <span class="edit-country" data-id="${ei}">✏️</span>
+`;
+div.appendChild(h2);
 
     const p = document.createElement("p");
     p.innerHTML = "<strong>Spielpaarung:</strong> " + (entry.match || "");
@@ -498,13 +584,28 @@ function updateTotal() {
     entry.tips.forEach((tip, ti) => {
       const row = document.createElement("div");
       row.className = "tip-row";
+      row.dataset.entryIndex = ei;
+row.dataset.tipIndex = ti;
 
+ const tipType = getTipType(tip);   // HT, FT, BTTS, CorrectScore, Other
+const country = entry.country;
+
+let ampelColor = "#ccc"; // Standard grau
+
+if (countryStatsDetailed[country] && countryStatsDetailed[country][tipType]) {
+  const profit = countryStatsDetailed[country][tipType].profit;
+  if (profit > 0) ampelColor = "#4CAF50";      // Grün
+  else if (profit < 0) ampelColor = "#F44336"; // Rot
+}
+
+      
 row.innerHTML = `
+  <span class="tip-ampel" style="background:${ampelColor};"></span>
   <button class="btn-fav" style="font-size:20px; background:none; border:none; cursor:pointer;">
     ${tip.favorite ? "⭐" : "☆"}
   </button>
-  <span><strong>${tip.label}:</strong> ${tip.value}</span>
-  <input type="number" step="0.01" class="quote-input">
+  <span class="tip-label"><strong>${tip.label}:</strong> ${tip.value}</span>
+  <input type="number" step="0.01" class="quote-input" style="font-size:18px; font-weight:bold;">
   <span class="profit-display"></span>
   <button class="btn-correct">✔️</button>
   <button class="btn-wrong">❌</button>
@@ -521,6 +622,7 @@ favBtn.onclick = () => {
   favBtn.textContent = tip.favorite ? "⭐" : "☆";
   row.style.border = tip.favorite ? "2px solid gold" : "1px solid #ccc";
   updateStats();
+  updateAmpeln();
   updateDayTotal();
 };
 
@@ -562,6 +664,7 @@ quoteInput.oninput = () => {
   updateTotal();
   updateDayTotal();
   updateStats();
+  updateAmpeln();
   updateCountryStats();
   updateCountryStatsDetailed();
 };
@@ -573,6 +676,7 @@ row.querySelector(".btn-correct").onclick = () => {
   updateTotal();
   updateDayTotal();
   updateStats();
+  updateAmpeln();
   updateCountryStats();
   updateCountryStatsDetailed();   // ⬅️ HIER NEU
 };
@@ -584,6 +688,7 @@ row.querySelector(".btn-wrong").onclick = () => {
   updateTotal();
   updateDayTotal();
   updateStats();
+  updateAmpeln();
   updateCountryStats();
   updateCountryStatsDetailed();
 };
@@ -595,6 +700,7 @@ row.querySelector(".btn-neutral").onclick = () => {
   updateTotal();
   updateDayTotal();
   updateStats();
+  updateAmpeln();
   updateCountryStats();
   updateCountryStatsDetailed();
 };
@@ -608,6 +714,7 @@ row.querySelector(".btn-reset").onclick = () => {
   updateTotal();
   updateDayTotal();
   updateStats();
+  updateAmpeln();
   updateCountryStats();
   updateCountryStatsDetailed();
 };
@@ -621,10 +728,37 @@ row.querySelector(".btn-reset").onclick = () => {
     output.appendChild(div);
   });
 
-  updateCountdowns();
-  updateStats();
-  updateDayTotal();
+ updateCountdowns();
+updateStats();
+updateAmpeln();
+updateDayTotal();
 }
+
+// ⭐ HIER Schritt 4 einfügen
+document.addEventListener("click", function (e) {
+  if (!e.target.classList.contains("edit-country")) return;
+
+  const id = e.target.dataset.id;
+  const entry = currentEntries[id];
+
+  const span = e.target.previousElementSibling;
+  const oldValue = span.textContent;
+
+  const newValue = prompt("Neues Land eingeben:", oldValue);
+  if (!newValue || newValue.trim() === "") return;
+
+  span.textContent = newValue;
+  entry.country = newValue;
+
+  const today = document.getElementById("datePicker").value;
+  if (today) {
+    rtdb.ref(`days/${today}/entries/${id}/country`).set(newValue);
+  }
+
+  updateCountryStats();
+  updateAmpeln();
+  updateCountryStatsDetailed();
+});
 
 /* ============================
    TEXT EINLESEN
@@ -636,6 +770,7 @@ document.getElementById("readButton").onclick = () => {
   if (!raw) {
     output.textContent = "Es wurde kein Text eingegeben.";
     updateDayTotal();
+    updateAmpeln();
     return;
   }
 
@@ -710,19 +845,23 @@ document.getElementById("confirmSaveName").onclick = async () => {
   }
 
   try {
-    const snap = await rtdb.ref("days/" + name).once("value");
+    const ref = rtdb.ref("days/" + name);
+    const snap = await ref.once("value");
+
+    // Wenn der Tag existiert → Nachfrage
     if (snap.exists()) {
-      alert("Ein Eintrag mit diesem Namen existiert bereits.");
-      return;
+      const overwrite = confirm(
+        "Für diesen Tag existieren bereits Daten.\nMöchtest du sie überschreiben?"
+      );
+      if (!overwrite) return;
     }
 
+    // Speichern / Überschreiben
     await rtdb.ref("days/" + name).set({ entries: currentEntries });
 
-    currentEntries = [];
-    renderEntries();
-    alert("Gespeichert unter: " + name);
+alert("Gespeichert unter: " + name);
 
-    document.getElementById("saveNameOverlay").style.display = "none";
+document.getElementById("saveNameOverlay").style.display = "none";
   } catch (e) {
     console.error(e);
     alert("Fehler beim Speichern.");
@@ -745,6 +884,13 @@ document.getElementById("loadDay").onclick = async () => {
         opt.textContent = day;
         select.appendChild(opt);
       });
+
+      const days = Object.keys(snap.val() || {}).sort();
+const lastDay = days[days.length - 1];
+
+if (lastDay) {
+  select.value = lastDay;
+}
     }
 
     loadOverlay.style.display = "flex";
@@ -764,18 +910,32 @@ document.getElementById("loadSelectedDay").onclick = async () => {
 
   try {
     const snap = await rtdb.ref("days/" + day).once("value");
+
     if (snap.exists()) {
       currentEntries = snap.val().entries || [];
+
+      // ⭐ 1. Globale Stats laden
+      countryStatsDetailed = await calculateGlobalCountryStats();
+
+      // ⭐ 2. Einträge rendern
       renderEntries();
+
+      // ⭐ 3. Ampeln aktualisieren
+      updateAmpeln();
+
+      // ⭐ 4. Tagesbilanz aktualisieren
+      updateDayTotal();
     } else {
       alert("Keine Daten für diesen Tag gefunden.");
     }
+
     loadOverlay.style.display = "none";
   } catch (e) {
     console.error(e);
     alert("Fehler beim Laden.");
   }
 };
+
 
 /* ============================
    LÖSCHEN (RTDB)
@@ -825,6 +985,7 @@ document.getElementById("deleteSelectedDay").onclick = async () => {
 ============================ */
 document.getElementById("showStats").onclick = () => {
   updateStats();
+  updateAmpeln();
   statsOverlay.style.display = "flex";
 };
 
@@ -904,8 +1065,37 @@ async function updateCountryStatsDetailed() {
     });
   });
 
+countryStatsDetailed = stats;
+
   await rtdb.ref("countryStatsDetailed").set(stats);
 }
+
+function updateAmpeln() {
+  document.querySelectorAll(".tip-row").forEach((row, index) => {
+    const entryIndex = parseInt(row.dataset.entryIndex);
+    const tipIndex = parseInt(row.dataset.tipIndex);
+
+    const entry = currentEntries[entryIndex];
+    const tip = entry.tips[tipIndex];
+
+    const tipType = getTipType(tip);
+    const country = entry.country;
+
+    let color = "#ccc";
+
+    if (countryStatsDetailed[country] && countryStatsDetailed[country][tipType]) {
+      const profit = countryStatsDetailed[country][tipType].profit;
+      if (profit > 0) color = "#4CAF50";
+      else if (profit < 0) color = "#F44336";
+    }
+
+    const ampel = row.querySelector(".tip-ampel");
+    if (ampel) ampel.style.background = color;
+  });
+}
+
+
+
 </script>
 
 </body>
