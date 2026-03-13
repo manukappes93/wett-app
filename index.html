@@ -365,16 +365,21 @@ select {
 
     <h3>Tippster auswählen:</h3>
 
-    <ul id="tipsterList" 
-    style="
-      max-height:400px;
-      overflow-y:auto;
-      padding-left:0;
-      width:90%;
-      margin:auto;
-      display:block;
-    ">
-</ul>
+<select id="tipsterSelect" style="width:100%; padding:10px; font-size:18px; margin-bottom:15px;">
+</select>
+
+<button id="btnTipsterImport" style="
+  width:100%;
+  padding:12px;
+  background:#4CAF50;
+  color:white;
+  border:none;
+  border-radius:6px;
+  font-size:18px;
+  cursor:pointer;
+">
+  Einlesen
+</button>
 
     <button id="closeTipster" class="close-button">Schließen</button>
   </div>
@@ -1639,26 +1644,23 @@ document.getElementById("closeTipster").onclick = () => {
   document.getElementById("tipsterOverlay").style.display = "none";
 };
 
-// Tippster-Liste rendern
+// Tippster-Dropdown füllen
 function renderTipsterList() {
-  const list = document.getElementById("tipsterList");
-  list.innerHTML = "";
+  const select = document.getElementById("tipsterSelect");
+  select.innerHTML = "";
 
   tipsters.forEach(t => {
-    const li = document.createElement("li");
-    li.textContent = t;
-    li.style.padding = "10px";
-    li.style.cursor = "pointer";
-    li.style.listStyle = "none";
-    li.style.border = "1px solid #ccc";
-    li.style.marginBottom = "8px";
-    li.style.borderRadius = "6px";
-    li.style.background = "#f9f9f9";
+    const opt = document.createElement("option");
+    opt.value = t;
+    opt.textContent = t;
+    select.appendChild(opt);
+  });
+}
 
-    // Klick auf Tippster
-  li.onclick = async () => {
+document.getElementById("btnTipsterImport").onclick = async () => {
   const raw = document.getElementById("tipsterBetInput").value.trim();
   const parsed = parseBetInput(raw);
+  const t = document.getElementById("tipsterSelect").value;
 
   if (!raw) {
     alert("Bitte zuerst eine Wette eingeben.");
@@ -1687,10 +1689,8 @@ function renderTipsterList() {
     }
   };
 
-  // ⭐ Zusatztipp speichern (NEU)
   currentEntries.push(newEntry);
 
-  // ⭐ Firestore speichern
   if (loadedDay) {
     await firestore
       .collection("days")
@@ -1708,7 +1708,6 @@ function renderTipsterList() {
       });
   }
 
-  // ⭐ UI aktualisieren
   renderEntries();
   updateDayTotal();
   updateStats();
@@ -1716,11 +1715,6 @@ function renderTipsterList() {
   document.getElementById("tipsterOverlay").style.display = "none";
   document.getElementById("tipsterBetInput").value = "";
 };
-
-    list.appendChild(li);
-  });
-}
-
 
 </script>
 
