@@ -778,26 +778,26 @@ h2.querySelector(".info-country").onclick = () => {
     p.innerHTML = "<strong>Spielpaarung:</strong> " + (entry.match || "");
     div.appendChild(p);
 
-    // ⭐ Zusatztipp erkennen + Buttons einfügen
+// Zusatztipps wie normale Tipps rendern – ohne Ampel
 if (entry.country === "Zusatztipp") {
+  entry.tips.forEach((tip, tipIndex) => {
+    const row = document.createElement("div");
+    row.className = "tip-row";
+    row.dataset.entryIndex = index;
+    row.dataset.tipIndex = tipIndex;
 
-  // Optische Hervorhebung
-  div.style.borderLeft = "4px solid orange";
-  div.style.background = "rgba(255, 230, 150, 0.3)";
+    row.innerHTML = `
+      <span class="tip-label">${tip.label}</span>
+      <span class="tip-quote">${tip.quote}</span>
 
-  // Löschen-Button
-  const delBtn = document.createElement("button");
-  delBtn.textContent = "Löschen";
-  delBtn.className = "delete-extra-btn";
-  delBtn.onclick = () => deleteExtraTip(entry, ei);
-  div.appendChild(delBtn);
+      <button class="btn-correct">✔</button>
+      <button class="btn-wrong">✘</button>
+    `;
 
-  // Bearbeiten-Button
-  const editBtn = document.createElement("button");
-  editBtn.textContent = "Bearbeiten";
-  editBtn.className = "edit-extra-btn";
-  editBtn.onclick = () => editExtraTip(entry, ei);
-  div.appendChild(editBtn);
+    container.appendChild(row);
+  });
+
+  return; // verhindert doppeltes Rendering
 }
 
 function updateTotal() {
@@ -1434,6 +1434,9 @@ function updateAmpeln() {
     const entry = currentEntries[entryIndex];
     const tip = entry.tips[tipIndex];
 
+        // ❗ Zusatztipps bekommen keine Ampelfarbe
+    if (entry.country === "Zusatztipp") return;
+
     const tipType = getTipType(tip);
     const country = entry.country;
 
@@ -1657,64 +1660,69 @@ function renderTipsterList() {
   });
 }
 
-document.getElementById("btnTipsterImport").onclick = async () => {
-  const raw = document.getElementById("tipsterBetInput").value.trim();
-  const parsed = parseBetInput(raw);
-  const t = document.getElementById("tipsterSelect").value;
+document.addEventListener("DOMContentLoaded", () => {
 
-  if (!raw) {
-    alert("Bitte zuerst eine Wette eingeben.");
-    return;
-  }
+  document.getElementById("btnTipsterImport").onclick = async () => {
+    const raw = document.getElementById("tipsterBetInput").value.trim();
+    const parsed = parseBetInput(raw);
+    const t = document.getElementById("tipsterSelect").value;
 
-  const newEntry = {
-    country: "Zusatztipp",
-    match: `${parsed.team1} - ${parsed.team2}`,
-    time: "",
-    tips: [
-      {
-        label: parsed.tipp,
-        value: parsed.quoteEinzel,
-        quote: parsed.quoteEinzel,
-        color: "reset",
-        favorite: true
-      }
-    ],
-    extra: {
-      sport: parsed.sport,
-      quoteGesamt: parsed.quoteGesamt,
-      einsatz: parsed.einsatz,
-      gewinn: parsed.gewinn,
-      tippster: t
+    if (!raw) {
+      alert("Bitte zuerst eine Wette eingeben.");
+      return;
     }
-  };
 
-  currentEntries.push(newEntry);
-
-  if (loadedDay) {
-    await firestore
-      .collection("days")
-      .doc(loadedDay)
-      .collection("zusatztipps")
-      .add({
-        match: newEntry.match,
-        tipp: parsed.tipp,
-        quoteEinzel: parsed.quoteEinzel,
+    const newEntry = {
+      country: "Zusatztipp",
+      match: `${parsed.team1} - ${parsed.team2}`,
+      time: "",
+      tips: [
+        {
+          label: parsed.tipp,
+          value: parsed.quoteEinzel,
+          quote: parsed.quoteEinzel,
+          color: "reset",
+          favorite: true
+        }
+      ],
+      extra: {
+        sport: parsed.sport,
         quoteGesamt: parsed.quoteGesamt,
         einsatz: parsed.einsatz,
         gewinn: parsed.gewinn,
-        tippster: t,
-        created: Date.now()
-      });
-  }
+        tippster: t
+      }
+    };
 
-  renderEntries();
-  updateDayTotal();
-  updateStats();
+    currentEntries.push(newEntry);
 
-  document.getElementById("tipsterOverlay").style.display = "none";
-  document.getElementById("tipsterBetInput").value = "";
-};
+    if (loadedDay) {
+      await firestore
+        .collection("days")
+        .doc(loadedDay)
+        .collection("zusatztipps")
+        .add({
+          match: newEntry.match,
+          tipp: parsed.tipp,
+          quoteEinzel: parsed.quoteEinzel,
+          quoteGesamt: parsed.quoteGesamt,
+          einsatz: parsed.einsatz,
+          gewinn: parsed.gewinn,
+          tippster: t,
+          created: Date.now()
+        });
+    }
+
+    renderEntries();
+    updateDayTotal();
+    updateStats();
+
+    document.getElementById("tipsterOverlay").style.display = "none";
+    document.getElementById("tipsterBetInput").value = "";
+  };
+
+});
+
 
 </script>
 
