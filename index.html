@@ -5,22 +5,25 @@
   <title>Wett-Tipp Analyse</title>
 
   <!-- Firebase V8 -->
-  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
-  <script>
-    var firebaseConfig = {
-      apiKey: "AIzaSyDvk3k1QYPzI6r3V9UfI0ekBK4mRI2VqDs",
-      authDomain: "datenbank-wettapp.firebaseapp.com",
-      databaseURL: "https://datenbank-wettapp-default-rtdb.europe-west1.firebasedatabase.app",
-      projectId: "datenbank-wettapp",
-      storageBucket: "datenbank-wettapp.firebasestorage.app",
-      messagingSenderId: "170685529955",
-      appId: "1:170685529955:web:f375bde58dacda32605d56"
-    };
-    firebase.initializeApp(firebaseConfig);
-    const rtdb = firebase.database();
-  </script>
+<script>
+  var firebaseConfig = {
+    apiKey: "AIzaSyDvk3k1QYPzI6r3V9UfI0ekBK4mRI2VqDs",
+    authDomain: "datenbank-wettapp.firebaseapp.com",
+    databaseURL: "https://datenbank-wettapp-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "datenbank-wettapp",
+    storageBucket: "datenbank-wettapp.firebasestorage.app",
+    messagingSenderId: "170685529955",
+    appId: "1:170685529955:web:f375bde58dacda32605d56"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+
+  // ⭐ Nur Realtime Database
+  const rtdb = firebase.database();
+</script>
 
   <style>
     body { font-family: Arial; margin: 40px; max-width: 900px; }
@@ -726,7 +729,9 @@ timeInput.addEventListener("blur", () => {
 
 const h2 = document.createElement("h2");
 h2.innerHTML = `
-  <span class="country-text">${entry.country || ""}</span>
+ <span class="country-text">
+  ${entry.country === "Zusatztipp" ? entry.extra?.tippster || "Zusatztipp" : entry.country}
+</span>
   <span class="edit-country" data-id="${ei}">✏️</span>
   <span class="info-country" data-id="${ei}">ℹ️</span>
 `;
@@ -780,25 +785,41 @@ h2.querySelector(".info-country").onclick = () => {
 
 // Zusatztipps wie normale Tipps rendern – ohne Ampel
 if (entry.country === "Zusatztipp") {
+
+  // Tippzeile mit Tipp, Quote und Einsatz nebeneinander
   entry.tips.forEach((tip, tipIndex) => {
     const row = document.createElement("div");
     row.className = "tip-row";
-    row.dataset.entryIndex = index;
+    row.dataset.entryIndex = ei;
     row.dataset.tipIndex = tipIndex;
+
+    // Layout: Tipp – Quote – Einsatz – Buttons
+    row.style.display = "grid";
+    row.style.gridTemplateColumns = "1fr auto auto auto";
+    row.style.alignItems = "center";
+    row.style.gap = "12px";
 
     row.innerHTML = `
       <span class="tip-label">${tip.label}</span>
-      <span class="tip-quote">${tip.quote}</span>
+      <span class="tip-quote"><strong>${tip.quote}</strong></span>
+      <span class="tip-stake">${entry.extra.einsatz} €</span>
 
-      <button class="btn-correct">✔</button>
-      <button class="btn-wrong">✘</button>
+<div class="tip-buttons">
+  <button class="btn-correct">✔</button>
+  <button class="btn-wrong">✘</button>
+  <button class="btn-delete">🗑️</button>
+</div>
+
     `;
-
-    container.appendChild(row);
+    
+    div.appendChild(row);
   });
 
-  return; // verhindert doppeltes Rendering
+  output.appendChild(div);
+    bindDeleteButtons();
+  return;
 }
+
 
 function updateTotal() {
   const stake = parseFloat(baseStakeInput.value || 0);
@@ -984,6 +1005,10 @@ row.querySelector(".btn-reset").onclick = () => {
     output.appendChild(div);
   });
 
+  // ⭐ Buttons aktivieren
+  bindDeleteButtons();
+}
+
 // ⭐ Länderblock-Farben aktualisieren
 document.querySelectorAll(".entry").forEach((block, i) => {
   const e = currentEntries[i];
@@ -1000,11 +1025,10 @@ document.querySelectorAll(".entry").forEach((block, i) => {
   }
 });
 
- updateCountdowns();
+updateCountdowns();
 updateStats();
 updateAmpeln();
 updateDayTotal();
-}
 
 // ⭐ HIER Schritt 4 einfügen
 document.addEventListener("click", function (e) {
@@ -1662,67 +1686,116 @@ function renderTipsterList() {
 
 document.addEventListener("DOMContentLoaded", () => {
 
-  document.getElementById("btnTipsterImport").onclick = async () => {
-    const raw = document.getElementById("tipsterBetInput").value.trim();
-    const parsed = parseBetInput(raw);
-    const t = document.getElementById("tipsterSelect").value;
+  // Tippster-Dropdown füllen
+  function renderTipsterList() {
+    const select = document.getElementById("tipsterSelect");
+    select.innerHTML = "";
 
-    if (!raw) {
-      alert("Bitte zuerst eine Wette eingeben.");
-      return;
-    }
+    tipsters.forEach(t => {
+      const opt = document.createElement("option");
+      opt.value = t;
+      opt.textContent = t;
+      select.appendChild(opt);
+    });
+  }
 
-    const newEntry = {
-      country: "Zusatztipp",
-      match: `${parsed.team1} - ${parsed.team2}`,
-      time: "",
-      tips: [
-        {
-          label: parsed.tipp,
-          value: parsed.quoteEinzel,
-          quote: parsed.quoteEinzel,
-          color: "reset",
-          favorite: true
-        }
-      ],
-      extra: {
-        sport: parsed.sport,
-        quoteGesamt: parsed.quoteGesamt,
-        einsatz: parsed.einsatz,
-        gewinn: parsed.gewinn,
-        tippster: t
+  // Einlesen-Button
+document.getElementById("btnTipsterImport").onclick = async () => {
+  const raw = document.getElementById("tipsterBetInput").value.trim();
+  const parsed = parseBetInput(raw);
+  const t = document.getElementById("tipsterSelect").value;
+
+  if (!raw) {
+    alert("Bitte zuerst eine Wette eingeben.");
+    return;
+  }
+
+  const newEntry = {
+    country: "Zusatztipp",
+    match: `${parsed.team1} - ${parsed.team2}`,
+    time: "",
+    tips: [
+      {
+        label: parsed.tipp,
+        value: parsed.quoteEinzel,
+        quote: parsed.quoteEinzel,
+        color: "reset",
+        favorite: true
       }
-    };
-
-    currentEntries.push(newEntry);
-
-    if (loadedDay) {
-      await firestore
-        .collection("days")
-        .doc(loadedDay)
-        .collection("zusatztipps")
-        .add({
-          match: newEntry.match,
-          tipp: parsed.tipp,
-          quoteEinzel: parsed.quoteEinzel,
-          quoteGesamt: parsed.quoteGesamt,
-          einsatz: parsed.einsatz,
-          gewinn: parsed.gewinn,
-          tippster: t,
-          created: Date.now()
-        });
+    ],
+    extra: {
+      sport: parsed.sport,
+      quoteGesamt: parsed.quoteGesamt,
+      einsatz: parsed.einsatz,
+      gewinn: parsed.gewinn,
+      tippster: t
     }
+  };
 
-    renderEntries();
-    updateDayTotal();
-    updateStats();
+  currentEntries.push(newEntry);
 
-    document.getElementById("tipsterOverlay").style.display = "none";
-    document.getElementById("tipsterBetInput").value = "";
+  // ⭐ Jetzt in RTDB speichern
+  if (loadedDay) {
+    await rtdb.ref(`days/${loadedDay}/zusatztipps`).push({
+      match: newEntry.match,
+      tipp: parsed.tipp,
+      quoteEinzel: parsed.quoteEinzel,
+      quoteGesamt: parsed.quoteGesamt,
+      einsatz: parsed.einsatz,
+      gewinn: parsed.gewinn,
+      tippster: t,
+      created: Date.now()
+    });
+  }
+
+  renderEntries();
+  updateDayTotal();
+  updateStats();
+
+  document.getElementById("tipsterOverlay").style.display = "none";
+  document.getElementById("tipsterBetInput").value = "";
+};
+
+  // Overlay öffnen
+  document.getElementById("btnTipster").onclick = () => {
+    renderTipsterList();
+    document.getElementById("tipsterOverlay").style.display = "flex";
   };
 
 });
 
+
+function bindDeleteButtons() {
+  document.querySelectorAll(".btn-delete").forEach(btn => {
+    btn.onclick = async () => {
+
+      const row = btn.closest(".tip-row");
+      const entryIndex = parseInt(row.dataset.entryIndex);
+
+      // ⭐ Eintrag sichern, bevor er gelöscht wird
+      const entry = currentEntries[entryIndex];
+
+      // 1. Aus currentEntries löschen
+      currentEntries.splice(entryIndex, 1);
+
+      // 2. Aus RTDB löschen
+      if (loadedDay && entry) {
+        const snap = await rtdb
+          .ref(`days/${loadedDay}/zusatztipps`)
+          .orderByChild("match")
+          .equalTo(entry.match)
+          .once("value");
+
+        snap.forEach(child => child.ref.remove());
+      }
+
+      // 3. UI aktualisieren
+      renderEntries();
+      updateDayTotal();
+      updateStats();
+    };
+  });
+}
 
 </script>
 
