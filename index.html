@@ -1963,6 +1963,11 @@ document.getElementById("closeCountryStats").onclick = () => {
   document.getElementById("countryStatsOverlay").style.display = "none";
 };
 
+document.getElementById("closeCountryInfo").onclick = () => {
+  document.getElementById("countryInfoOverlay").style.display = "none";
+};
+
+
 /* ============================
    COUNTDOWN INTERVALL
 ============================ */
@@ -2270,14 +2275,25 @@ function isAltBookmakerSlip(text) {
 function parseAltBookmakerSlip(text) {
   const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
 
-  // TEAMZEILE (erste echte vs-Zeile)
-  const teamLine = lines.find(l =>
-    /vs/i.test(l) &&
-    !l.startsWith("X ") &&     // Wiederholungsheader ignorieren
-    !l.startsWith("(")
-  );
+// TEAMZEILE (erste echte vs-Zeile)
+const teamLine = lines.find(l =>
+  /vs/i.test(l) &&
+  !l.startsWith("X ") &&
+  !l.startsWith("(")
+);
 
-  const [team1, team2] = teamLine.split(/vs\.?/i).map(s => s.trim());
+// Falls keine Teamzeile gefunden → Parser abbrechen
+if (!teamLine) {
+  console.warn("Keine Teamzeile gefunden:", lines);
+  return {
+    type: "unbekannt",
+    error: "Keine Teamzeile gefunden",
+    raw: text
+  };
+}
+
+const [team1, team2] = teamLine.split(/vs\.?/i).map(s => s.trim());
+
 
   // STATUS
   const offenIndex = lines.findIndex(l => /offen/i.test(l));
@@ -2392,6 +2408,14 @@ const tipp = lines.find(l =>
   };
 }
 
+function isKombiSlip(text) {
+  return (
+    /WETTSCHEIN-NR/i.test(text) &&
+    /\d+\.\s/.test(text) &&        // Blockstart
+    /\d+([.,]\d+)?\s*EUR/i.test(text) // Einsatz/Gewinn
+  );
+}
+
 
 /* ============================
    UNIVERSALER PARSER FÜR WETTSCHEINE
@@ -2400,27 +2424,20 @@ function parseBetInput(text) {
 
   console.log("parseBetInput RAW:", text);
 
-    // ⭐ Alternative Buchmacher-Formate zuerst prüfen
+// 1. Kombiwette zuerst prüfen
+if (isKombiSlip(text)) {
+  return parseKombiBet(text);
+}
+
+// 2. Alt-Format
 if (isAltBookmakerSlip(text)) {
   return parseAltBookmakerSlip(text);
 }
 
+// 3. Simple Slip
 if (isSimpleSlip(text)) {
   return parseSimpleSlip(text);
 }
-
-const alt = parseAltBookmakerSlip(text);
-
-return {
-  type: "einzel",
-  team1: alt.team1,
-  team2: alt.team2,
-  tipp: alt.tipp,
-  quoteEinzel: alt.quoteEinzel,
-  einsatz: alt.einsatz,
-  gewinn: alt.gewinn
-};
-
 
 // ⭐ Kombiwette erkennen (NUR wenn wirklich mehrere Tipps vorhanden sind)
 // ⭐ Nur echte Quoten erkennen (zwischen 1.10 und 20.0)
@@ -2551,12 +2568,34 @@ const isBlockStart = l =>
       continue;
     }
 
-    // TIPP
-    if (stage === 3 && isTipLine(line)) {
-      console.log("➡ TIPP erkannt:", line);
-      current.tipp = line;
-      continue;
-    }
+// ⭐ MEHRZEILIGE MARKT-/TIPP-ERKENNUNG + NORMALISIERUNG
+if (stage === 3 && isTipLine(line)) {
+  console.log("➡ MARKTZEILE erkannt:", line);
+
+  // Bindestrich am Ende entfernen
+  let clean = line.replace(/-\s*$/, "").trim();
+
+  // ⭐ NEUE ERWEITERUNG:
+  // "UND GU" → "UND GESAMTZAHL UNTER"
+  clean = clean.replace(/\bGU\b/i, "GESAMTZAHL UNTER");
+
+  // "UND GO" → "UND GESAMTZAHL ÜBER" (falls später gebraucht)
+  clean = clean.replace(/\bGO\b/i, "GESAMTZAHL ÜBER");
+
+  // "S1" → "S1" (optional später erweiterbar)
+  // "S2" → "S2"
+
+  // Erste Marktzeile setzen oder anhängen
+  if (!current.tipp) {
+    current.tipp = clean;
+  } else {
+    current.tipp += " " + clean;
+  }
+
+  continue;
+}
+
+
 
     // QUOTE
     if (isQuote(line)) {
@@ -2693,9 +2732,6 @@ document.getElementById("btnTipster").onclick = () => {
 
   const input = document.getElementById("tipsterBetInput");
   input.value = "";            // ⭐ wirklich leeren
-  input.innerHTML = "";        // ⭐ textarea komplett resetten
-  input.textContent = "";      // ⭐ falls Browser was cached
-  input.setAttribute("value", ""); // ⭐ falls HTML-Attribut gesetzt wurde
 
   document.getElementById("tipsterOverlay").style.display = "flex";
 };
