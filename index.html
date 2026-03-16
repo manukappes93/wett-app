@@ -432,6 +432,10 @@ let isTimePickerOpen = false;
 let countryStatsDetailed = {};
 let loadedDay = null;
 let globalCountryStats = {};
+let lastLoadedDay = null;
+let isEditingExtraTip = false;
+let editingExtraTipId = null;
+
 
 
 const output = document.getElementById("output");
@@ -466,15 +470,25 @@ baseStakeInput.oninput = async () => {
    SORTIERUNG & COUNTDOWN
 ============================ */
 function sortEntries() {
-  // Normale Sortierung nach Uhrzeit
-  currentEntries.sort((a, b) => (a.time || "") > (b.time || "") ? 1 : -1);
+  // Wenn wir gerade einen Zusatztipp editieren → NICHT sortieren
+  if (isEditingExtraTip) return;
 
-  // ⭐ Zusatztipps immer nach unten sortieren
-  currentEntries = [
-    ...currentEntries.filter(e => e.country !== "Zusatztipp"),
-    ...currentEntries.filter(e => e.country === "Zusatztipp")
-  ];
+  const extras = currentEntries.filter(e => e.country === "Zusatztipp");
+  const normals = currentEntries.filter(e => e.country !== "Zusatztipp");
+
+  // Normale Tipps nach Zeit sortieren
+  normals.sort((a, b) => {
+    const tA = a.time ? a.time.replace(":", "") : "9999";
+    const tB = b.time ? b.time.replace(":", "") : "9999";
+    return parseInt(tA) - parseInt(tB);
+  });
+
+  // Zusatztipps NICHT sortieren → Reihenfolge bleibt stabil
+  currentEntries = [...extras, ...normals];
 }
+
+
+
 
 
 function updateCountdowns() {
@@ -900,7 +914,8 @@ const entry = {
 
 
   // In Liste einfügen
-  currentEntries.push(entry);
+  currentEntries.unshift(entry);
+
 
   // In Firestore speichern
   await rtdb.ref(`days/${loadedDay}/zusatztipps`).push({
@@ -926,7 +941,6 @@ const entry = {
 
   // Overlay schließen
   document.getElementById("tipsterOverlay").style.display = "none";
-  document.getElementById("tipsterBetInput").value = "";
 };
 
 
@@ -1171,12 +1185,12 @@ if (anyColor) {
     extra.quoteGesamt = parseFloat(quoteInput.value || 0);
     updateExtraTotal();
     updateDayTotal();
-  updateCountryUI();
+    updateCountryUI();
     updateStats();
     updateExtraStats();
     updateCountryStats();
-    updateAmpeln();
     updateCountryStatsDetailed();
+    updateAmpeln();
   };
 
   // ⭐ Einsatz ändern
@@ -1188,8 +1202,8 @@ if (anyColor) {
     updateStats();
     updateExtraStats();
     updateCountryStats();
-    updateAmpeln();
     updateCountryStatsDetailed();
+    updateAmpeln();
   };
 
   // ⭐ Bewertung für gesamte Wette
@@ -1208,8 +1222,8 @@ row.querySelector(".btn-correct").onclick = () => {
   updateStats();
   updateExtraStats();
   updateCountryStats();
-  updateAmpeln();
   updateCountryStatsDetailed();
+  updateAmpeln();
 };
 
 
@@ -1228,8 +1242,8 @@ row.querySelector(".btn-correct").onclick = () => {
   updateStats();
   updateExtraStats();
   updateCountryStats();
-  updateAmpeln();
   updateCountryStatsDetailed();
+  updateAmpeln();
 };
 
 
@@ -1248,8 +1262,8 @@ row.querySelector(".btn-neutral").onclick = () => {
   updateStats();
   updateExtraStats();
   updateCountryStats();
-  updateAmpeln();
   updateCountryStatsDetailed();
+  updateAmpeln();
 };
 
 
@@ -1272,36 +1286,53 @@ row.querySelector(".btn-neutral").onclick = () => {
   updateStats();
   updateExtraStats();
   updateCountryStats();
-  updateAmpeln();
   updateCountryStatsDetailed();
+  updateAmpeln();
 };
 
 
   div.appendChild(row);
 
   // ⭐ Block-Profit wie bei Ländertipps
-  function updateExtraTotal() {
-    const einsatz = parseFloat(extra.einsatz || 0);
-    let total = 0;
+function updateExtraTotal() {
+  const einsatz = parseFloat(extra.einsatz || 0);
+  let total = 0;
 
-    const quote = parseFloat(extra.quoteGesamt || 0);
-    const anyColor = entry.tips.find(t => t.color && t.color !== "reset");
+  const quote = parseFloat(extra.quoteGesamt || 0);
+  const anyColor = entry.tips.find(t => t.color && t.color !== "reset");
 
-    if (anyColor) {
-      const state = anyColor.color;
-      if (state === "correct") {
-        total += (quote * einsatz) - einsatz;
-      } else if (state === "wrong") {
-        total -= einsatz;
-      }
+  if (anyColor) {
+    const state = anyColor.color;
+    if (state === "correct") {
+      total += (quote * einsatz) - einsatz;
+    } else if (state === "wrong") {
+      total -= einsatz;
     }
-
-    entry.blockProfit = total;
-
-    totalBox.textContent = total.toFixed(2) + " €";
-    totalBox.style.backgroundColor =
-      total > 0 ? "#c8ffcc" : total < 0 ? "#ffcccc" : "#ddd";
   }
+
+  entry.blockProfit = total;
+
+  totalBox.textContent = total.toFixed(2) + " €";
+  totalBox.style.backgroundColor =
+    total > 0 ? "#c8ffcc" : total < 0 ? "#ffcccc" : "#ddd";
+
+  // ⭐ Rahmen SOFORT aktualisieren
+  const entryBlock = document.querySelectorAll(".entry")[ei];
+
+  if (entryBlock) {
+    if (total > 0) {
+      entryBlock.style.border = "3px solid #4CAF50";
+      entryBlock.style.backgroundColor = "#e8ffe8";
+    } else if (total < 0) {
+      entryBlock.style.border = "3px solid #F44336";
+      entryBlock.style.backgroundColor = "#ffe5e5";
+    } else {
+      entryBlock.style.border = "1px solid #ccc";
+      entryBlock.style.backgroundColor = "white";
+    }
+  }
+}
+
 
   updateExtraTotal();
 
@@ -1330,13 +1361,17 @@ function updateTotal() {
       }
     });
 
-   // ⭐ Profit speichern
+  // ⭐ Profit speichern
   entry.blockProfit = total;
 
   totalBox.textContent = total.toFixed(2) + " €";
   totalBox.style.backgroundColor =
     total > 0 ? "#c8ffcc" : total < 0 ? "#ffcccc" : "#ddd";
+
+  // ⭐ HIER: Rahmen sofort aktualisieren
+  updateEntryBorder(ei);
 }
+
 
 entry.tips.forEach((tip, ti) => {
   const row = document.createElement("div");
@@ -1440,9 +1475,9 @@ quoteInput.oninput = () => {
   updateStats();
   updateExtraStats();
   updateCountryStats();
-  updateAmpeln();
   updateCountryStats();
   updateCountryStatsDetailed();
+  updateAmpeln();
 };
 
 row.querySelector(".btn-correct").onclick = () => {
@@ -1459,9 +1494,9 @@ row.querySelector(".btn-correct").onclick = () => {
   updateStats();
   updateExtraStats();
   updateCountryStats();
-  updateAmpeln();
   updateCountryStats();
   updateCountryStatsDetailed();
+  updateAmpeln();
 };
 
 row.querySelector(".btn-wrong").onclick = () => {
@@ -1478,9 +1513,9 @@ row.querySelector(".btn-wrong").onclick = () => {
   updateStats();
   updateExtraStats();
   updateCountryStats();
-  updateAmpeln();
   updateCountryStats();
   updateCountryStatsDetailed();
+  updateAmpeln();
 };
 
 row.querySelector(".btn-neutral").onclick = () => {
@@ -1497,9 +1532,9 @@ row.querySelector(".btn-neutral").onclick = () => {
   updateStats();
   updateExtraStats();
   updateCountryStats();
-  updateAmpeln();
   updateCountryStats();
   updateCountryStatsDetailed();
+  updateAmpeln();
 };
 
 row.querySelector(".btn-reset").onclick = () => {
@@ -1519,9 +1554,9 @@ row.querySelector(".btn-reset").onclick = () => {
   updateStats();
   updateExtraStats();
   updateCountryStats();
-  updateAmpeln();
   updateCountryStats();
   updateCountryStatsDetailed();
+  updateAmpeln();
 };
 
 
@@ -1635,9 +1670,19 @@ document.getElementById("saveDay").onclick = () => {
   }
 
   const input = document.getElementById("saveNameInput");
-  input.value = today();
+
+  // ⭐ Wenn ein Tag geladen wurde → diesen vorauswählen
+  if (lastLoadedDay) {
+    input.value = lastLoadedDay;
+  } 
+  // ⭐ Wenn KEIN Tag geladen wurde → aktuellen Tag nehmen
+  else {
+    input.value = today();
+  }
+
   document.getElementById("saveNameOverlay").style.display = "flex";
 };
+
 
 document.getElementById("cancelSaveName").onclick = () => {
   document.getElementById("saveNameOverlay").style.display = "none";
@@ -1730,11 +1775,17 @@ document.getElementById("loadSelectedDay").onclick = async () => {
       // ⭐ Aktuell geladenen Tag anzeigen
       document.getElementById("currentDayDisplay").textContent = "Tag: " + day;
       loadedDay = day;
+      lastLoadedDay = day;   // ⭐ Wichtig
 
       // ⭐ Einträge laden
       currentEntries = data.entries || [];
-// ⭐ Einträge laden
-currentEntries = data.entries || [];
+      
+      currentEntries.forEach(e => {
+        if (e.country === "Zusatztipp") {
+          if (!e.extra) e.extra = {};
+          if (typeof e.extra.tippster !== "string") e.extra.tippster = "";
+        }
+      });
 
 /* ============================
    ZUSATZTIPP-DATEN ROBUST LADEN
@@ -1774,6 +1825,9 @@ tips: d.bets.map(b => ({
       tippster: d.tippster || ""
     }
   });
+  const last = currentEntries[currentEntries.length - 1];
+  if (!last.extra) last.extra = {};
+  if (typeof last.extra.tippster !== "string") last.extra.tippster = "";
 }
 
   });
@@ -1796,13 +1850,6 @@ currentEntries.forEach(e => {
   }
 });
 
-/* ============================
-   ZUSATZTIPP IMMER NACH UNTEN SORTIEREN
-============================ */
-currentEntries = [
-  ...currentEntries.filter(e => e.country !== "Zusatztipp"),
-  ...currentEntries.filter(e => e.country === "Zusatztipp")
-];
 
 // ⭐ Globale Statistik laden (wichtig für Info-Button!)
 globalCountryStats = await calculateGlobalCountryStats();
@@ -1971,6 +2018,7 @@ function updateAmpeln() {
   document.querySelectorAll(".tip-row").forEach((row, index) => {
     const entryIndex = parseInt(row.dataset.entryIndex);
     const tipIndex = parseInt(row.dataset.tipIndex);
+    if (isNaN(tipIndex)) return;
 
     const entry = currentEntries[entryIndex];
     const tip = entry.tips[tipIndex];
@@ -2025,40 +2073,44 @@ async function deleteExtraTip(entry, index) {
   updateCountryStats();
 }
 
-
 /* ============================
    ZUSATZTIPP BEARBEITEN
 ============================ */
-function editExtraTip(entry, index) {
-  document.getElementById("editTippsterOverlay").style.display = "flex";
+function editExtraTip(entry) {
+  isEditingExtraTip = true;
+  editingExtraTipId = entry.id;
 
+  document.getElementById("editTippsterOverlay").style.display = "flex";
   document.getElementById("editTippsterInput").value =
     entry.extra?.tippster || "";
-
-  window.editingExtraTipIndex = index;
 }
 
-
-document.getElementById("closeCountryInfo").onclick = () => {
-  document.getElementById("countryInfoOverlay").style.display = "none";
-};
-
-// ============================
-// TIPPSTER BEARBEITEN SPEICHERN
-// ============================
+/* ============================
+   TIPPSTER SPEICHERN
+============================ */
 document.getElementById("saveTippster").onclick = () => {
-  const idx = window.editingExtraTipIndex;
-  const entry = currentEntries[idx];
+  const entry = currentEntries.find(e => e.id === editingExtraTipId);
+  if (!entry) return;
 
   entry.extra.tippster = document.getElementById("editTippsterInput").value.trim();
+
+  isEditingExtraTip = false;
+  editingExtraTipId = null;
 
   document.getElementById("editTippsterOverlay").style.display = "none";
   renderEntries();
 };
 
+/* ============================
+   TIPPSTER BEARBEITEN ABBRECHEN
+============================ */
 document.getElementById("cancelTippsterEdit").onclick = () => {
+  isEditingExtraTip = false;
+  editingExtraTipId = null;
+
   document.getElementById("editTippsterOverlay").style.display = "none";
 };
+
 
 
 /* ============================
@@ -2203,6 +2255,143 @@ extractBets(tokens) {
 const smartParser = new SmartBetSlipParser();
 
 
+function isAltBookmakerSlip(text) {
+  const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+
+  return (
+    lines[0].includes("vs") &&                     // Teamzeile oben
+    lines.some(l => /offen/i.test(l)) &&           // Status
+    lines.some(l => /^\d+([.,]\d+)?$/.test(l)) &&  // Quote
+    lines.some(l => /€\s*\d/.test(l))              // Einsatz/Gewinn
+  );
+}
+
+
+function parseAltBookmakerSlip(text) {
+  const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+
+  // TEAMZEILE (erste echte vs-Zeile)
+  const teamLine = lines.find(l =>
+    /vs/i.test(l) &&
+    !l.startsWith("X ") &&     // Wiederholungsheader ignorieren
+    !l.startsWith("(")
+  );
+
+  const [team1, team2] = teamLine.split(/vs\.?/i).map(s => s.trim());
+
+  // STATUS
+  const offenIndex = lines.findIndex(l => /offen/i.test(l));
+
+  // TIPP (erste Zeile nach OFFEN)
+  const tipp = lines[offenIndex + 1] || "";
+
+  // MARKT (alle Zeilen bis zur nächsten Zahl)
+  let markt = "";
+  for (let i = offenIndex + 2; i < lines.length; i++) {
+    if (/^\d+([.,]\d+)?$/.test(lines[i])) break; // Quote erreicht
+    if (/€/.test(lines[i])) break;              // Einsatz erreicht
+    markt += (markt ? " " : "") + lines[i];
+  }
+
+  // QUOTE
+  const quoteLine = lines.find(l => /^\d+([.,]\d+)?$/.test(l));
+  const quote = parseFloat(quoteLine.replace(",", "."));
+
+  // EINSATZ
+  const einsatzLine = lines.find(l => /€\s*\d/.test(l));
+  const einsatz = parseFloat(einsatzLine.replace(/[^\d.,]/g, "").replace(",", "."));
+
+  // GEWINN
+  const eurLines = lines.filter(l => /€\s*\d/.test(l));
+  const gewinn = eurLines.length > 1
+    ? parseFloat(eurLines[1].replace(/[^\d.,]/g, "").replace(",", "."))
+    : 0;
+
+  return {
+  type: "einzel",
+  team1,
+  team2,
+  tipp: `${tipp} | ${markt}`,
+  quoteEinzel: quote,
+  einsatz,
+  gewinn,
+  bets: [
+    {
+      team1,
+      team2,
+      tipp: `${tipp} | ${markt}`,
+      quote
+    }
+  ]
+};
+
+}
+
+// --------------------------------------
+// NEUER SIMPLE-SLIP ERKENNER BET365
+// --------------------------------------
+function isSimpleSlip(text) {
+  const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+
+  return (
+    lines.length >= 5 &&
+    !lines[0].includes("vs") &&
+    !lines[0].includes("@") &&
+    !lines[0].includes(" v ") &&
+    lines.some(l => /@|vs| v /i.test(l)) &&
+    lines.some(l => /^\d+([.,]\d+)?$/.test(l)) &&
+    lines.some(l => /Einsatz/i.test(l)) &&
+    lines.some(l => /Gesamtgewinn/i.test(l))
+  );
+}
+
+// --------------------------------------
+// NEUER SIMPLE-SLIP PARSER BET365
+// --------------------------------------
+function parseSimpleSlip(text) {
+  const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+
+  // ⭐ ECHTEN TIPP FINDEN
+const tipp = lines.find(l =>
+  !/live|benachrichtig|auswahlen|top-wetten|wettsteuer|einsatz|gesamtgewinn/i.test(l) &&
+  !/€/.test(l) &&
+  !/^\d+([.,]\d+)?$/.test(l) &&
+  !/@|vs| v /i.test(l) &&
+  l.length > 2
+);
+
+
+  const teamLine = lines.find(l => /@|vs| v /i.test(l));
+  const [team1, team2] = teamLine.split(/@|vs| v /i).map(s => s.trim());
+
+  const quoteLine = lines.find(l => /^\d+([.,]\d+)?$/.test(l));
+  const quote = parseFloat(quoteLine.replace(",", "."));
+
+  const einsatzIndex = lines.findIndex(l => /Einsatz/i.test(l));
+  const einsatz = parseFloat(lines[einsatzIndex + 1].replace(/[^\d.,]/g, "").replace(",", "."));
+
+  const gewinnIndex = lines.findIndex(l => /Gesamtgewinn/i.test(l));
+  const gewinn = parseFloat(lines[gewinnIndex + 1].replace(/[^\d.,]/g, "").replace(",", "."));
+
+  return {
+    type: "einzel",
+    team1,
+    team2,
+    tipp,
+    quoteEinzel: quote,
+    einsatz,
+    gewinn,
+    bets: [
+      {
+        team1,
+        team2,
+        tipp,
+        quote
+      }
+    ]
+  };
+}
+
 
 /* ============================
    UNIVERSALER PARSER FÜR WETTSCHEINE
@@ -2210,6 +2399,28 @@ const smartParser = new SmartBetSlipParser();
 function parseBetInput(text) {
 
   console.log("parseBetInput RAW:", text);
+
+    // ⭐ Alternative Buchmacher-Formate zuerst prüfen
+if (isAltBookmakerSlip(text)) {
+  return parseAltBookmakerSlip(text);
+}
+
+if (isSimpleSlip(text)) {
+  return parseSimpleSlip(text);
+}
+
+const alt = parseAltBookmakerSlip(text);
+
+return {
+  type: "einzel",
+  team1: alt.team1,
+  team2: alt.team2,
+  tipp: alt.tipp,
+  quoteEinzel: alt.quoteEinzel,
+  einsatz: alt.einsatz,
+  gewinn: alt.gewinn
+};
+
 
 // ⭐ Kombiwette erkennen (NUR wenn wirklich mehrere Tipps vorhanden sind)
 // ⭐ Nur echte Quoten erkennen (zwischen 1.10 und 20.0)
@@ -2271,13 +2482,20 @@ function parseKombiBet(text) {
   let stage = 0;
 
   // Blockstart nur wenn nach der Zahl ein Leerzeichen kommt
-  const isBlockStart = l => /^\d+\.\s/.test(l);
+const isBlockStart = l =>
+  /^\d+\.\s/.test(l) ||               // klassisch: "12. ..."
+  /^[A-Za-z]\s*\d+\.\s/.test(l) ||    // "D 223748. ..."
+  /^\d+\s+\d+\.\s/.test(l) ||         // "2 205496. ..."
+  /^\(\d+\s+\d+\.\s/.test(l);         // "(2 256142. ..."
+
+
 
   const isSportLine = l => /(Basketball|Fußball|Tennis|Handball|Eishockey)/i.test(l);
   const isQuote = l =>
   /^\d+([.,]\d+)?$/.test(l) &&
   parseFloat(l.replace(",", ".")) > 1.01;
-  const isTipLine = l => /(über|unter|1x2|handicap|gesamtzahl|spielzeit|s1|s2)/i.test(l);
+  const isTipLine = l =>
+  /(über|unter|1x2|handicap|gesamtzahl|spielzeit|s1|s2|btts|bts|beide teams treffen|treffen|ja|nein)/i.test(l);
   const isTeamLine = l =>
     !isBlockStart(l) &&
     !isSportLine(l) &&
@@ -2472,8 +2690,16 @@ function renderTipsterList() {
 // Overlay öffnen
 document.getElementById("btnTipster").onclick = () => {
   renderTipsterList();
+
+  const input = document.getElementById("tipsterBetInput");
+  input.value = "";            // ⭐ wirklich leeren
+  input.innerHTML = "";        // ⭐ textarea komplett resetten
+  input.textContent = "";      // ⭐ falls Browser was cached
+  input.setAttribute("value", ""); // ⭐ falls HTML-Attribut gesetzt wurde
+
   document.getElementById("tipsterOverlay").style.display = "flex";
 };
+
 
 // Overlay schließen
 document.getElementById("closeTipster").onclick = () => {
@@ -2538,6 +2764,23 @@ function normalizeCountry(name) {
   return name.trim();
 }
 
+function updateEntryBorder(ei) {
+  const entryBlock = document.querySelectorAll(".entry")[ei];
+  const entry = currentEntries[ei];
+
+  if (!entryBlock) return;
+
+  if (entry.blockProfit > 0) {
+    entryBlock.style.border = "3px solid #4CAF50";
+    entryBlock.style.backgroundColor = "#e8ffe8";
+  } else if (entry.blockProfit < 0) {
+    entryBlock.style.border = "3px solid #F44336";
+    entryBlock.style.backgroundColor = "#ffe5e5";
+  } else {
+    entryBlock.style.border = "1px solid #ccc";
+    entryBlock.style.backgroundColor = "white";
+  }
+}
 
 </script>
 
