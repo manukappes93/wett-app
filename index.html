@@ -4,9 +4,10 @@
   <meta charset="UTF-8" />
   <title>Wett-Tipp Analyse</title>
 
-  <!-- Firebase V8 -->
-  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+ <!-- Firebase V8 -->
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
 
 <script>
   var firebaseConfig = {
@@ -21,9 +22,38 @@
 
   firebase.initializeApp(firebaseConfig);
 
-  // ⭐ Nur Realtime Database
-  const rtdb = firebase.database();
+  firebase.auth().onAuthStateChanged(user => {
+    if (user) {
+      console.log("Eingeloggt als:", user.uid);
+
+      // ⭐ HIER entsteht rtdb
+      window.rtdb = firebase.database();
+
+      // ⭐ Ab hier darf deine App loslegen
+      initApp();
+    } else {
+      firebase.auth()
+        .signInWithEmailAndPassword("TestEmail@TestMailer.com", "DasisteinTest123.")
+        .catch(err => {
+          console.error("Login fehlgeschlagen:", err);
+          alert("Login fehlgeschlagen – Zugriff verweigert.");
+        });
+    }
+  });
+
+  function initApp() {
+    console.log("App gestartet – DB bereit");
+
+    // ⭐ Alles, was direkt rtdb braucht, HIER aufrufen:
+    loadBaseStake();
+    loadAllSavedDays();
+    calculateGlobalCountryStats().then(stats => {
+      globalCountryStats = stats;
+    });
+  }
 </script>
+
+
 
   <style>
     body { font-family: Arial; margin: 40px; max-width: 900px; }
@@ -455,7 +485,6 @@ async function loadBaseStake() {
   const snap = await rtdb.ref("settings/baseStake").once("value");
   if (snap.exists()) baseStakeInput.value = snap.val();
 }
-loadBaseStake();
 
 /* Grundeinsatz speichern */
 baseStakeInput.oninput = async () => {
@@ -834,18 +863,6 @@ function getTipType(tip) {
   if (tip.label.includes("Beide Teams")) return "BTTS";
   if (tip.label.includes("Genaues Ergebnis")) return "CorrectScore";
   return "Other";
-}
-
-function renderTipsterList() {
-  const select = document.getElementById("tipsterSelect");
-  select.innerHTML = "";
-
-  tipsters.forEach(t => {
-    const opt = document.createElement("option");
-    opt.value = t;
-    opt.textContent = t;
-    select.appendChild(opt);
-  });
 }
 
 document.getElementById("btnTipster").onclick = () => {
@@ -1788,52 +1805,6 @@ document.getElementById("loadSelectedDay").onclick = async () => {
       });
 
 /* ============================
-   ZUSATZTIPP-DATEN ROBUST LADEN
-============================ */
-let extraSnap;
-try {
-  extraSnap = await firestore
-    .collection("days")
-    .doc(day)
-    .collection("zusatztipps")
-    .get();
-} catch (e) {
-  extraSnap = null;
-}
-
-if (extraSnap && !extraSnap.empty) {
-  extraSnap.forEach(doc => {
-    const d = doc.data();
-
-    if (d.type === "kombi") {
-  currentEntries.push({
-    country: "Zusatztipp",
-    match: d.match,
-    time: "",
-tips: d.bets.map(b => ({
-  label: `${b.team1} - ${b.team2}`,
-  value: b.tipp,
-  quote: b.quote,
-  color: b.color || "reset",   // ✅ gespeicherte Farbe übernehmen
-  favorite: true
-})),
-    extra: {
-      sport: d.sport || "",
-      quoteGesamt: d.quoteGesamt || "",
-      einsatz: d.einsatz || "",
-      gewinn: d.gewinn || "",
-      tippster: d.tippster || ""
-    }
-  });
-  const last = currentEntries[currentEntries.length - 1];
-  if (!last.extra) last.extra = {};
-  if (typeof last.extra.tippster !== "string") last.extra.tippster = "";
-}
-
-  });
-}
-
-/* ============================
    FEHLENDE EXTRA-DATEN BEI ALTEN TAGEN FIXEN
 ============================ */
 currentEntries.forEach(e => {
@@ -2052,22 +2023,23 @@ function updateAmpeln() {
 ============================ */
 async function deleteExtraTip(entry, index) {
   if (!loadedDay) return;
-
-  // ❗ Sicherheitsabfrage
   if (!confirm("Willst du diesen Zusatztipp wirklich löschen?")) return;
 
   // 1. Aus currentEntries entfernen
   currentEntries.splice(index, 1);
 
-  // 2. Firestore-Eintrag löschen
-  const snap = await firestore
-    .collection("days")
-    .doc(loadedDay)
-    .collection("zusatztipps")
-    .where("bet", "==", entry.match)
-    .get();
+  // 2. Aus RTDB löschen
+  const ref = rtdb.ref(`days/${loadedDay}/zusatztipps`);
+  const snap = await ref.once("value");
 
-  snap.forEach(doc => doc.ref.delete());
+  if (snap.exists()) {
+    snap.forEach(child => {
+      const d = child.val();
+      if (d.match === entry.match) {
+        child.ref.remove();
+      }
+    });
+  }
 
   // 3. UI aktualisieren
   renderEntries();
@@ -2077,6 +2049,7 @@ async function deleteExtraTip(entry, index) {
   updateExtraStats();
   updateCountryStats();
 }
+
 
 /* ============================
    ZUSATZTIPP BEARBEITEN
@@ -2695,10 +2668,6 @@ console.log("➡ Gewinn:", gewinn);
 }
 
 
-
-
-
-
 // Fixe Tippster-Liste
 const tipsters = [
   "Headmaster",
@@ -2712,18 +2681,6 @@ const tipsters = [
   "Expert NBA",
   "NBATipps365"
 ];
-
-function renderTipsterList() {
-  const select = document.getElementById("tipsterSelect");
-  select.innerHTML = "";
-
-  tipsters.forEach(t => {
-    const opt = document.createElement("option");
-    opt.value = t;
-    opt.textContent = t;
-    select.appendChild(opt);
-  });
-}
 
 
 // Overlay öffnen
