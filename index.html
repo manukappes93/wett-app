@@ -328,7 +328,8 @@ select {
   </div>
 
   <div id="output"></div>
-  <!-- Statistik -->
+ 
+  <!-- Statistik Overlay-->
 <div id="statsOverlay">
   <div class="overlay-box">
     <h2>Statistik</h2>
@@ -355,7 +356,7 @@ select {
 </div>
 
 
-  <!-- Laden -->
+  <!-- Laden Overlay -->
   <div id="loadOverlay">
     <div class="overlay-box">
       <h2>Gespeicherte Tage</h2>
@@ -365,7 +366,7 @@ select {
     </div>
   </div>
 
-  <!-- Löschen -->
+  <!-- Löschen Overlay -->
   <div id="deleteOverlay">
     <div class="overlay-box">
       <h2>Tag löschen</h2>
@@ -375,7 +376,7 @@ select {
     </div>
   </div>
 
-  <!-- Speichern unter -->
+  <!-- Speichern unter Overlay -->
   <div id="saveNameOverlay">
     <div class="overlay-box">
       <h2>Speichern unter …</h2>
@@ -384,6 +385,8 @@ select {
       <button id="cancelSaveName">Abbrechen</button>
     </div>
   </div>
+
+ <!-- GesamtBilanz -->
 
 <div id="countryStatsOverlay" class="overlay">
   <div class="overlay-content">
@@ -413,7 +416,7 @@ select {
   </div>
 </div>
 
-  <!-- Zusatztipps -->
+  <!-- Zusatztipps hinzufügen -->
 <div id="tipsterOverlay" class="overlay" style="display:none;">
   <div class="overlay-box">
     <h2>Zusatztipp hinzufügen</h2>
@@ -448,7 +451,7 @@ select {
 
 
 <!-- ============================
-     TIPPSTER BEARBEITEN OVERLAY
+     Tippster BEARBEITEN OVERLAY
 ============================= -->
 <div id="editTippsterOverlay" class="overlay" style="display:none;">
   <div class="overlay-content" style="background:white; padding:20px; border-radius:10px; width:300px;">
@@ -527,9 +530,6 @@ function sortEntries() {
   // Zusatztipps NICHT sortieren → Reihenfolge bleibt stabil
   currentEntries = [...extras, ...normals];
 }
-
-
-
 
 
 function updateCountdowns() {
@@ -628,8 +628,6 @@ function updateDayTotal() {
 
       return; // fertig mit normalen Tipps
     }
-
-
   });
 
   const box = document.getElementById("dayTotalBox");
@@ -637,6 +635,10 @@ function updateDayTotal() {
   box.style.backgroundColor =
     total > 0 ? "#c8ffcc" : total < 0 ? "#ffcccc" : "#dddddd";
 }
+
+/* ============================
+   Globale Statistik berechnen
+============================ */
 
 async function loadAllSavedDays() {
 const snapshot = await rtdb.ref("days").get();
@@ -864,8 +866,6 @@ function updateExtraStats() {
 }
 
 
-
-
 /* ============================
    Hilfsfunktion für Tipp‑Art 
 ============================ */
@@ -876,6 +876,10 @@ function getTipType(tip) {
   if (tip.label.includes("Genaues Ergebnis")) return "CorrectScore";
   return "Other";
 }
+
+/* ============================
+   Zusatzwette hinzufügen 
+============================ */
 
 document.getElementById("btnTipster").onclick = () => {
   renderTipsterList();
@@ -972,7 +976,17 @@ const entry = {
   document.getElementById("tipsterOverlay").style.display = "none";
 };
 
+/* ============================
+   Tippzeilen färben
+============================ */
 
+function updateTipRowBackground(tip, row) {
+  row.classList.remove("tip-correct", "tip-wrong", "tip-neutral");
+
+  if (tip.color === "correct") row.classList.add("tip-correct");
+  if (tip.color === "wrong")   row.classList.add("tip-wrong");
+  if (tip.color === "neutral") row.classList.add("tip-neutral");
+}
 
 /* ============================
    EINTRÄGE RENDERN
@@ -1157,7 +1171,9 @@ if (entry.country !== "Zusatztipp") {
   div.appendChild(p);
 }
 
-// Zusatztipps wie normale Tipps rendern – ohne Ampel
+/* ============================
+   Zusatztipps RENDERN8 Start
+============================ */
 if (entry.country === "Zusatztipp") {
 
   const extra = entry.extra || {};
@@ -1207,7 +1223,15 @@ row.innerHTML = `
 `;
 
 // ⭐ Hintergrundfarbe beim Laden setzen (Zusatztipp)
-updateBlockAmpel(entry, row);
+const anyColor = entry.tips.find(t => t.color !== "reset");
+
+row.classList.remove("tip-correct", "tip-wrong", "tip-neutral");
+
+if (anyColor) {
+  if (anyColor.color === "correct") row.classList.add("tip-correct");
+  if (anyColor.color === "wrong")   row.classList.add("tip-wrong");
+  if (anyColor.color === "neutral") row.classList.add("tip-neutral");
+}
 
   const quoteInput = row.querySelector(".quote-input");
   const einsatzInput = row.querySelector(".einsatz-input");
@@ -1222,8 +1246,6 @@ updateBlockAmpel(entry, row);
     updateExtraStats();
     updateCountryStats();
     updateCountryStatsDetailed();
-    updateAmpeln();
-    updateBlockAmpel(entry, row);
   };
 
   // ⭐ Einsatz ändern
@@ -1236,8 +1258,6 @@ updateBlockAmpel(entry, row);
     updateExtraStats();
     updateCountryStats();
     updateCountryStatsDetailed();
-    updateAmpeln();
-    updateBlockAmpel(entry, row);
   };
 
   // ⭐ Bewertung für gesamte Wette
@@ -1258,7 +1278,6 @@ row.querySelector(".btn-correct").onclick = () => {
   updateCountryStats();
   updateCountryStatsDetailed();
   updateAmpeln();
-  updateBlockAmpel(entry, row);
 };
 
 
@@ -1279,7 +1298,6 @@ row.querySelector(".btn-correct").onclick = () => {
   updateCountryStats();
   updateCountryStatsDetailed();
   updateAmpeln();
-  updateBlockAmpel(entry, row);
 };
 
 
@@ -1300,7 +1318,6 @@ row.querySelector(".btn-neutral").onclick = () => {
   updateCountryStats();
   updateCountryStatsDetailed();
   updateAmpeln();
-  updateBlockAmpel(entry, row);
 };
 
 
@@ -1325,7 +1342,6 @@ row.querySelector(".btn-neutral").onclick = () => {
   updateCountryStats();
   updateCountryStatsDetailed();
   updateAmpeln();
-  updateBlockAmpel(entry, row);
 };
 
 
@@ -1379,7 +1395,9 @@ function updateExtraTotal() {
   return;
 }
 
-
+/* ============================
+   Zusatztipps RENDERN ENDE
+============================ */
 
 
 function updateTotal() {
@@ -1423,12 +1441,8 @@ if (tip.favorite) {
 }
 
   // ⭐ gespeicherte Bewertung wiederherstellen
-  if (tip.color === "correct") {
-    row.classList.add("tip-correct");
-  }
-  if (tip.color === "wrong") {
-    row.classList.add("tip-wrong");
-  }
+ updateTipRowBackground(tip, row);
+
 
   const tipType = getTipType(tip);
   const country = entry.country;
@@ -1466,7 +1480,6 @@ favBtn.onclick = () => {
   updateStats();
   updateExtraStats();
   updateCountryStats();
-  updateAmpeln();
   updateDayTotal();
   updateCountryUI();
 };
@@ -1520,7 +1533,7 @@ quoteInput.oninput = () => {
 
 row.querySelector(".btn-correct").onclick = () => {
   tip.color = "correct";
-  row.style.backgroundColor = "#c8ffcc";
+  updateTipRowBackground(tip, row);
 
   // ⭐ Farbe in RTDB speichern
   rtdb.ref(`days/${loadedDay}/entries/${ei}/tips/${ti}/color`).set("correct");
@@ -1534,13 +1547,11 @@ row.querySelector(".btn-correct").onclick = () => {
   updateCountryStats();
   updateCountryStats();
   updateCountryStatsDetailed();
-  updateAmpeln();
-  updateBlockAmpel(entry, row);
 };
 
 row.querySelector(".btn-wrong").onclick = () => {
   tip.color = "wrong";
-  row.style.backgroundColor = "#ffcccc";
+  updateTipRowBackground(tip, row);
 
   // ⭐ Farbe in RTDB speichern
   rtdb.ref(`days/${loadedDay}/entries/${ei}/tips/${ti}/color`).set("wrong");
@@ -1554,13 +1565,11 @@ row.querySelector(".btn-wrong").onclick = () => {
   updateCountryStats();
   updateCountryStats();
   updateCountryStatsDetailed();
-  updateAmpeln();
-  updateBlockAmpel(entry, row);
 };
 
 row.querySelector(".btn-neutral").onclick = () => {
   tip.color = "neutral";
-  row.style.backgroundColor = "#f0f0f0";
+  updateTipRowBackground(tip, row);
 
   // ⭐ Farbe in RTDB speichern
   rtdb.ref(`days/${loadedDay}/entries/${ei}/tips/${ti}/color`).set("neutral");
@@ -1574,13 +1583,11 @@ row.querySelector(".btn-neutral").onclick = () => {
   updateCountryStats();
   updateCountryStats();
   updateCountryStatsDetailed();
-  updateAmpeln();
-  updateBlockAmpel(entry, row);
 };
 
 row.querySelector(".btn-reset").onclick = () => {
   tip.color = "reset";
-  row.style.backgroundColor = "";
+  updateTipRowBackground(tip, row);
 
   // ⭐ Farbe in RTDB speichern
   rtdb.ref(`days/${loadedDay}/entries/${ei}/tips/${ti}/color`).set("reset");
@@ -1597,8 +1604,6 @@ row.querySelector(".btn-reset").onclick = () => {
   updateCountryStats();
   updateCountryStats();
   updateCountryStatsDetailed();
-  updateAmpeln();
-  updateBlockAmpel(entry, row);
 };
 
 
@@ -1616,19 +1621,6 @@ output.appendChild(div);
 // ⭐ Buttons aktivieren
 bindDeleteButtons();
 }     // ← schließt renderEntries() oder loadSelectedDay()
-
-// ⭐ BlockAmpeln aktualisieren
-function updateBlockAmpel(entry, row) {
-  row.classList.remove("tip-correct", "tip-wrong", "tip-neutral");
-
-  const anyColor = entry.tips.find(t => t.color !== "reset");
-
-  if (!anyColor) return;
-
-  if (anyColor.color === "correct") row.classList.add("tip-correct");
-  if (anyColor.color === "wrong")   row.classList.add("tip-wrong");
-  if (anyColor.color === "neutral") row.classList.add("tip-neutral");
-}
 
 
 // ⭐ Länderblock-Farben aktualisieren
@@ -1665,7 +1657,7 @@ document.getElementById("readButton").onclick = () => {
   if (!raw) {
     output.textContent = "Es wurde kein Text eingegeben.";
     updateDayTotal();
-  updateCountryUI();
+    updateCountryUI();
     updateAmpeln();
     return;
   }
@@ -1938,7 +1930,6 @@ document.getElementById("showStats").onclick = () => {
   updateStats();
   updateExtraStats();
   updateCountryStats();
-  updateAmpeln();
   statsOverlay.style.display = "flex";
 };
 
@@ -2143,6 +2134,9 @@ document.getElementById("chkShowZusatztipps").onchange = (e) => {
   renderEntries();
 };
 
+/* ============================
+   PARSER START
+============================ */
 
 /* ============================
    SMART PARSER KLASSE
@@ -2720,6 +2714,9 @@ console.log("➡ Gewinn:", gewinn);
   };
 }
 
+/* ============================
+   PARSER ENDE
+============================ */
 
 // Fixe Tippster-Liste
 const tipsters = [
@@ -2793,7 +2790,7 @@ function bindDeleteButtons() {
       // 3. UI aktualisieren
       renderEntries();
       updateDayTotal();
-  updateCountryUI();
+      updateCountryUI();
       updateStats();
       updateExtraStats();
       updateCountryStats();
