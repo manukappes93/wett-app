@@ -304,6 +304,16 @@ select {
   <button id="showStats">Statistik</button>
   <button id="btnCountryStats" class="stats-button">🌍 GesamtBilanz</button>
 
+  <label style="margin-left:15px; font-size:16px;">
+  <input type="checkbox" id="chkShowLaender" checked>
+  Ländertipps anzeigen
+</label>
+
+<label style="margin-left:15px; font-size:16px;">
+  <input type="checkbox" id="chkShowZusatztipps" checked>
+  Zusatztipps anzeigen
+</label>
+
 <div style="margin-top:20px; margin-bottom:10px;">
   <span id="currentDayDisplay" style="font-size:20px; font-weight:bold; color:#333;"></span>
 </div>
@@ -465,6 +475,8 @@ let globalCountryStats = {};
 let lastLoadedDay = null;
 let isEditingExtraTip = false;
 let editingExtraTipId = null;
+let showLaendertipps = true;
+let showZusatztipps = true;
 
 
 
@@ -969,7 +981,18 @@ function renderEntries() {
   sortEntries();
   output.innerHTML = "";
 
-  currentEntries.forEach((entry, ei) => {
+currentEntries.forEach((entry, ei) => {
+
+  // 2. FILTER: Ländertipps ausblenden
+  if (!showLaendertipps && entry.country !== "Zusatztipp") {
+    return;
+  }
+
+  // 3. FILTER: Zusatztipps ausblenden
+  if (!showZusatztipps && entry.country === "Zusatztipp") {
+    return;
+  }
+
     const div = document.createElement("div");
     div.className = "entry";
 
@@ -1184,15 +1207,7 @@ row.innerHTML = `
 `;
 
 // ⭐ Hintergrundfarbe beim Laden setzen (Zusatztipp)
-const anyColor = entry.tips.find(t => t.color !== "reset");
-
-row.classList.remove("tip-correct", "tip-wrong", "tip-neutral");
-
-if (anyColor) {
-  if (anyColor.color === "correct") row.classList.add("tip-correct");
-  if (anyColor.color === "wrong")   row.classList.add("tip-wrong");
-  if (anyColor.color === "neutral") row.classList.add("tip-neutral");
-}
+updateBlockAmpel(entry, row);
 
   const quoteInput = row.querySelector(".quote-input");
   const einsatzInput = row.querySelector(".einsatz-input");
@@ -1208,6 +1223,7 @@ if (anyColor) {
     updateCountryStats();
     updateCountryStatsDetailed();
     updateAmpeln();
+    updateBlockAmpel(entry, row);
   };
 
   // ⭐ Einsatz ändern
@@ -1221,6 +1237,7 @@ if (anyColor) {
     updateCountryStats();
     updateCountryStatsDetailed();
     updateAmpeln();
+    updateBlockAmpel(entry, row);
   };
 
   // ⭐ Bewertung für gesamte Wette
@@ -1241,6 +1258,7 @@ row.querySelector(".btn-correct").onclick = () => {
   updateCountryStats();
   updateCountryStatsDetailed();
   updateAmpeln();
+  updateBlockAmpel(entry, row);
 };
 
 
@@ -1261,6 +1279,7 @@ row.querySelector(".btn-correct").onclick = () => {
   updateCountryStats();
   updateCountryStatsDetailed();
   updateAmpeln();
+  updateBlockAmpel(entry, row);
 };
 
 
@@ -1281,6 +1300,7 @@ row.querySelector(".btn-neutral").onclick = () => {
   updateCountryStats();
   updateCountryStatsDetailed();
   updateAmpeln();
+  updateBlockAmpel(entry, row);
 };
 
 
@@ -1305,6 +1325,7 @@ row.querySelector(".btn-neutral").onclick = () => {
   updateCountryStats();
   updateCountryStatsDetailed();
   updateAmpeln();
+  updateBlockAmpel(entry, row);
 };
 
 
@@ -1514,6 +1535,7 @@ row.querySelector(".btn-correct").onclick = () => {
   updateCountryStats();
   updateCountryStatsDetailed();
   updateAmpeln();
+  updateBlockAmpel(entry, row);
 };
 
 row.querySelector(".btn-wrong").onclick = () => {
@@ -1533,6 +1555,7 @@ row.querySelector(".btn-wrong").onclick = () => {
   updateCountryStats();
   updateCountryStatsDetailed();
   updateAmpeln();
+  updateBlockAmpel(entry, row);
 };
 
 row.querySelector(".btn-neutral").onclick = () => {
@@ -1552,6 +1575,7 @@ row.querySelector(".btn-neutral").onclick = () => {
   updateCountryStats();
   updateCountryStatsDetailed();
   updateAmpeln();
+  updateBlockAmpel(entry, row);
 };
 
 row.querySelector(".btn-reset").onclick = () => {
@@ -1574,6 +1598,7 @@ row.querySelector(".btn-reset").onclick = () => {
   updateCountryStats();
   updateCountryStatsDetailed();
   updateAmpeln();
+  updateBlockAmpel(entry, row);
 };
 
 
@@ -1591,6 +1616,19 @@ output.appendChild(div);
 // ⭐ Buttons aktivieren
 bindDeleteButtons();
 }     // ← schließt renderEntries() oder loadSelectedDay()
+
+// ⭐ BlockAmpeln aktualisieren
+function updateBlockAmpel(entry, row) {
+  row.classList.remove("tip-correct", "tip-wrong", "tip-neutral");
+
+  const anyColor = entry.tips.find(t => t.color !== "reset");
+
+  if (!anyColor) return;
+
+  if (anyColor.color === "correct") row.classList.add("tip-correct");
+  if (anyColor.color === "wrong")   row.classList.add("tip-wrong");
+  if (anyColor.color === "neutral") row.classList.add("tip-neutral");
+}
 
 
 // ⭐ Länderblock-Farben aktualisieren
@@ -2089,6 +2127,21 @@ document.getElementById("cancelTippsterEdit").onclick = () => {
   document.getElementById("editTippsterOverlay").style.display = "none";
 };
 
+/* ============================
+   Filterfunktionen
+============================ */
+
+// ⭐ Checkbox: Ländertipps anzeigen/ausblenden
+document.getElementById("chkShowLaender").onchange = (e) => {
+  showLaendertipps = e.target.checked;
+  renderEntries();
+};
+
+// ⭐ Checkbox: Zusatztipps anzeigen/ausblenden
+document.getElementById("chkShowZusatztipps").onchange = (e) => {
+  showZusatztipps = e.target.checked;
+  renderEntries();
+};
 
 
 /* ============================
