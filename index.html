@@ -288,6 +288,43 @@ select {
   cursor: pointer;
 }
 
+.entry-header {
+  display: grid;
+  grid-template-columns: 70px 1fr 1fr 30px;
+  padding: 8px;
+  background: #f0f0f0;
+  cursor: pointer;
+  font-weight: bold;
+  border-bottom: 1px solid #ccc;
+  align-items: center;
+}
+
+.entry-header:hover {
+  background: #e5e5e5;
+}
+
+.toggle-arrow {
+  font-size: 18px;
+  text-align: center;
+}
+
+.entry-content {
+  padding: 10px;
+  display: block; /* Standard: offen */
+}
+
+.entry-header {
+  display: grid;
+  grid-template-columns: 70px 1fr 1fr 30px 90px; /* letzter Block = Profit */
+  padding: 8px;
+  background: #f0f0f0;
+  cursor: pointer;
+  font-weight: bold;
+  border-bottom: 1px solid #ccc;
+  align-items: center;
+}
+
+
   </style>
 </head>
 
@@ -415,6 +452,19 @@ select {
     <button id="closeCountryInfo" class="close-button">Schließen</button>
   </div>
 </div>
+
+<!-- ============================
+     Tage an denen Tipps für Land vorhanden sind OVERLAY
+============================= -->
+
+<div id="daysForCountryOverlay" class="overlay">
+  <div class="overlay-box">
+    <h2 id="daysForCountryTitle"></h2>
+    <div id="daysForCountryList"></div>
+    <button id="closeDaysForCountry">Schließen</button>
+  </div>
+</div>
+
 
   <!-- Zusatztipps hinzufügen -->
 <div id="tipsterOverlay" class="overlay" style="display:none;">
@@ -715,7 +765,14 @@ function renderCountryStats(data) {
     const countryBox = document.createElement("div");
     countryBox.className = "country-box";
 
-    let html = `<h3>${country}</h3>`;
+   let html = `
+  <h3 style="display:flex; align-items:center; gap:6px;">
+    ${country}
+    <span class="country-days-info" 
+          data-country="${country}" 
+          style="cursor:pointer; font-size:14px;">ℹ️</span>
+  </h3>
+`;
 
    for (const type in data[country]) {
   const t = data[country][type];
@@ -1007,8 +1064,61 @@ currentEntries.forEach((entry, ei) => {
     return;
   }
 
-    const div = document.createElement("div");
-    div.className = "entry";
+const div = document.createElement("div");
+div.className = "entry";
+
+/* ⭐ Profitbox zuerst erzeugen */
+const totalBox = document.createElement("div");
+totalBox.style.cssText =
+  "padding:6px 10px; border-radius:6px; background:#ddd; font-weight:bold; text-align:right;";
+totalBox.textContent = "0.00 €";
+
+/* ⭐ Content-Wrapper */
+const content = document.createElement("div");
+content.className = "entry-content";
+content.style.display = "block"; // Standard: offen
+
+/* ⭐ Header */
+const header = document.createElement("div");
+header.className = "entry-header";
+
+header.innerHTML = `
+  <span class="header-time">${entry.time || "--:--"}</span>
+  <span class="header-country">${
+    entry.country === "Zusatztipp"
+      ? entry.extra?.tippster || "Zusatztipp"
+      : normalizeCountry(entry.country)
+  }</span>
+  <span class="header-match">${entry.match || ""}</span>
+  <span class="toggle-arrow">▲</span>
+`;
+
+/* ⭐ Profitbox in den Header hängen */
+header.appendChild(totalBox);
+
+/* ⭐ Toggle-Logik */
+let isOpen = entry.isOpen !== undefined ? entry.isOpen : true;
+
+// ⭐ UI initial setzen
+content.style.display = isOpen ? "block" : "none";
+header.querySelector(".toggle-arrow").textContent = isOpen ? "▼" : "▲";
+
+header.onclick = () => {
+  isOpen = !isOpen;
+
+  // UI aktualisieren
+  content.style.display = isOpen ? "block" : "none";
+  header.querySelector(".toggle-arrow").textContent = isOpen ? "▼" : "▲";
+
+  // ⭐ Zustand lokal speichern
+  entry.isOpen = isOpen;
+};
+
+/* ⭐ Header + Content in den Block */
+div.appendChild(header);
+div.appendChild(content);
+
+
 
     // ⭐ Länderblock einfärben nach Tages-Profit
 if (entry.blockProfit > 0) {
@@ -1021,11 +1131,6 @@ if (entry.blockProfit > 0) {
   div.style.border = "1px solid #ccc";
   div.style.backgroundColor = "white";
 }
-
-    const totalBox = document.createElement("div");
-    totalBox.style.cssText = "float:right; padding:6px 10px; border-radius:6px; background:#ddd; font-weight:bold;";
-    totalBox.textContent = "0.00 €";
-    div.appendChild(totalBox);
 
    const timeInput = document.createElement("input");
 timeInput.type = "time";
@@ -1055,13 +1160,13 @@ timeInput.addEventListener("blur", () => {
   renderEntries();
 });
 
-    div.appendChild(timeInput);
+    content.appendChild(timeInput);
 
     const cd = document.createElement("div");
     cd.className = "countdown";
     cd.id = "countdown-" + ei;
     cd.textContent = "–";
-    div.appendChild(cd);
+    content.appendChild(cd);
 
 const h2 = document.createElement("h2");
 
@@ -1083,7 +1188,7 @@ h2.innerHTML = `
   <span class="info-country" data-id="${ei}">ℹ️</span>
 `;
 
-div.appendChild(h2);
+content.appendChild(h2);
 
 // ⭐ Edit-Button Logik eindeutig setzen
 const editBtn = h2.querySelector(".edit-country");
@@ -1109,46 +1214,61 @@ if (newCountry !== null && newCountry.trim() !== "") {
 };
 
 // Info-Icon Event
-h2.querySelector(".info-country").onclick = () => {
+h2.querySelector(".info-country").onclick = async () => {
   const country = normalizeCountry(entry.country);
 
-  // ⭐ Jetzt globale Statistik statt Tagesstatistik
-  const statsForCountry = globalCountryStats[country];
+  // ⭐ Globale Statistik neu berechnen
+  const stats = await calculateGlobalCountryStats();
 
-  document.getElementById("countryInfoTitle").textContent =
-    `Bilanz für ${country}`;
+  // ⭐ Globale Statistik rendern (wie beim Button)
+  renderCountryStats(stats);
 
-  const list = document.getElementById("countryInfoList");
+  // ⭐ Overlay öffnen
+  document.getElementById("countryStatsOverlay").style.display = "flex";
+
+  // ⭐ Suchfeld automatisch füllen
+  const searchInput = document.getElementById("countrySearch");
+  searchInput.value = country.toLowerCase();
+
+  // ⭐ Auto-Focus (optional)
+  searchInput.focus();
+
+  // ⭐ Filterung sofort ausführen
+  const boxes = document.querySelectorAll("#countryStatsContent .country-box");
+
+  boxes.forEach(box => {
+    const countryName = box.querySelector("h3").textContent.toLowerCase();
+    box.style.display = countryName.includes(country.toLowerCase()) ? "block" : "none";
+  });
+};
+
+
+// An Welchen Tagen sind Tipps für Land vorhanden
+
+function showDaysForCountry(country, days) {
+  const title = document.getElementById("daysForCountryTitle");
+  const list = document.getElementById("daysForCountryList");
+
+  title.textContent = `Tage mit Tipps für ${country}`;
   list.innerHTML = "";
 
-  if (!statsForCountry) {
-    list.innerHTML = "<p>Keine Daten vorhanden.</p>";
+  if (days.length === 0) {
+    list.innerHTML = "<p>Keine Tage gefunden.</p>";
   } else {
-    Object.keys(statsForCountry).forEach(tipType => {
-      const s = statsForCountry[tipType];
-
+    days.forEach(day => {
       const div = document.createElement("div");
-      div.style.marginBottom = "12px";
-      div.style.padding = "10px";
-      div.style.border = "1px solid #ccc";
-      div.style.borderRadius = "6px";
-      div.style.background = "#f9f9f9";
-
-      div.innerHTML = `
-        <strong>${tipType}</strong><br>
-        ✔️ Richtig: ${s.correct}<br>
-        ❌ Falsch: ${s.wrong}<br>
-        ➖ Neutral: ${s.neutral}<br>
-        💰 Profit: <span class="${s.profit >= 0 ? "profit-positive" : "profit-negative"}">
-          ${s.profit.toFixed(2)} €
-        </span>
-      `;
-
+      div.textContent = day;
+      div.className = "day-entry";
+      div.style.padding = "6px 0";
       list.appendChild(div);
     });
   }
 
-  document.getElementById("countryInfoOverlay").style.display = "flex";
+  document.getElementById("daysForCountryOverlay").style.display = "flex";
+}
+
+document.getElementById("closeDaysForCountry").onclick = () => {
+  document.getElementById("daysForCountryOverlay").style.display = "none";
 };
 
 
@@ -1168,7 +1288,7 @@ if (delBtn) {
 if (entry.country !== "Zusatztipp") {
   const p = document.createElement("p");
   p.innerHTML = "<strong>Spielpaarung:</strong> " + (entry.match || "");
-  div.appendChild(p);
+  content.appendChild(p);
 }
 
 /* ============================
@@ -1345,7 +1465,7 @@ row.querySelector(".btn-neutral").onclick = () => {
 };
 
 
-  div.appendChild(row);
+  content.appendChild(row);
 
   // ⭐ Block-Profit wie bei Ländertipps
 function updateExtraTotal() {
@@ -1611,7 +1731,7 @@ row.querySelector(".btn-reset").onclick = () => {
 if (!tip.color) tip.color = "reset";
 
 updateProfit();
-div.appendChild(row);
+content.appendChild(row);
 });   // ← schließt entry.tips.forEach
 
 updateTotal();
@@ -1834,6 +1954,13 @@ document.getElementById("loadSelectedDay").onclick = async () => {
         }
       });
 
+	// ⭐ isOpen für jeden Eintrag übernehmen oder Standard setzen
+	currentEntries.forEach(e => {
+	  if (typeof e.isOpen !== "boolean") {
+   	 		e.isOpen = true; // Standard: offen
+	  }
+	});
+
 /* ============================
    FEHLENDE EXTRA-DATEN BEI ALTEN TAGEN FIXEN
 ============================ */
@@ -1961,10 +2088,6 @@ document.getElementById("countryStatsOverlay").style.display = "flex";
 
 document.getElementById("closeCountryStats").onclick = () => {
   document.getElementById("countryStatsOverlay").style.display = "none";
-};
-
-document.getElementById("closeCountryInfo").onclick = () => {
-  document.getElementById("countryInfoOverlay").style.display = "none";
 };
 
 
