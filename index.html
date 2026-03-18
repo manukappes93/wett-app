@@ -289,41 +289,48 @@ select {
 }
 
 .entry-header {
-  display: grid;
-  grid-template-columns: 70px 1fr 1fr 30px;
-  padding: 8px;
-  background: #f0f0f0;
-  cursor: pointer;
-  font-weight: bold;
-  border-bottom: 1px solid #ccc;
+  display: flex;
   align-items: center;
+  gap: 6px; /* optional */
 }
 
-.entry-header:hover {
-  background: #e5e5e5;
+
+.header-time {
+  width: 55px; /* z. B. 12:30 */
+  text-align: left;
+}
+
+.header-status {
+  width: 90px; /* Start in 12m / Im Gange / Beendet */
+  text-align: left;
+}
+
+.header-country {
+  width: 80px; /* schmäler wie gewünscht */
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.header-match {
+  flex: 1; /* nimmt den restlichen Platz */
+}
+
+.header-check {
+  color: #2ecc71; /* schönes Grün */
+  font-size: 18px;
+  margin-left: 6px;
 }
 
 .toggle-arrow {
-  font-size: 18px;
-  text-align: center;
+  width: 20px;
+  text-align: right;
 }
 
-.entry-content {
-  padding: 10px;
-  display: block; /* Standard: offen */
-}
 
-.entry-header {
-  display: grid;
-  grid-template-columns: 70px 1fr 1fr 30px 90px; /* letzter Block = Profit */
-  padding: 8px;
-  background: #f0f0f0;
-  cursor: pointer;
-  font-weight: bold;
-  border-bottom: 1px solid #ccc;
-  align-items: center;
+.entry-header div:last-child {
+  margin-left: auto;
 }
-
 
   </style>
 </head>
@@ -530,6 +537,7 @@ let isEditingExtraTip = false;
 let editingExtraTipId = null;
 let showLaendertipps = true;
 let showZusatztipps = true;
+let days = {};
 
 
 
@@ -558,6 +566,7 @@ baseStakeInput.oninput = async () => {
   if (!isTimePickerOpen) {
     renderEntries();
     }
+  updateDayTotal()
 };
 
 /* ============================
@@ -597,6 +606,12 @@ function updateCountdowns() {
     // Erstmal alle Klassen entfernen
     cd.classList.remove("countdown-warning", "countdown-running", "countdown-finished", "countdown-blink");
 
+    const hs = document.getElementById("header-status-" + index);
+    if (hs) {
+      hs.classList.remove("countdown-warning", "countdown-running", "countdown-finished", "countdown-blink");
+    }
+
+
     if (!entry.time) {
       cd.textContent = "Keine Uhrzeit gesetzt";
       return;
@@ -623,12 +638,16 @@ function updateCountdowns() {
       // ⭐ Unter 15 Minuten → rot
       if (diff < 15 * 60 * 1000) {
         cd.classList.add("countdown-warning");
+       if (hs) hs.classList.add("countdown-warning");
       }
+
 
       // ⭐ Unter 5 Minuten → blinkend
       if (diff < 5 * 60 * 1000) {
         cd.classList.add("countdown-blink");
+      if (hs) hs.classList.add("countdown-blink");
       }
+
 
     } else {
       diff = Math.abs(diff);
@@ -637,12 +656,29 @@ function updateCountdowns() {
       if (minutes < 110) {
         cd.textContent = "im Gange";
         cd.classList.add("countdown-running");
+         if (hs) hs.classList.add("countdown-running");
+
       } else {
-        cd.textContent = "Beendet";
-        cd.classList.add("countdown-finished");
-      }
+  cd.textContent = "Beendet";
+  cd.classList.add("countdown-finished");
+  if (hs) hs.classList.add("countdown-finished");
+}
+
     }
   });
+
+    currentEntries.forEach((entry, index) => {
+    const hs = document.getElementById("header-status-" + index);
+    if (hs) hs.textContent = getHeaderStatus(entry);
+  });
+
+  currentEntries.forEach((entry, index) => {
+  const checkEl = document.getElementById("header-check-" + index);
+  if (checkEl) {
+    checkEl.textContent = isEntryComplete(entry) ? "✔️" : "";
+  }
+  });
+
 }
 
 /* ============================
@@ -1045,6 +1081,52 @@ function updateTipRowBackground(tip, row) {
   if (tip.color === "neutral") row.classList.add("tip-neutral");
 }
 
+function getHeaderStatus(entry) {
+  if (!entry.time) return "Keine Uhrzeit";
+
+  const now = new Date();
+  const target = new Date(loadedDay + "T" + entry.time + ":00");
+
+  const loadedDate = loadedDay ? new Date(loadedDay + "T00:00:00") : null;
+  const todayDate = new Date(today() + "T00:00:00");
+
+  // Vergangener Tag → beendet
+  if (loadedDate < todayDate) return "Beendet";
+
+  let diff = target - now;
+
+  if (diff > 0) {
+    const h = Math.floor(diff / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    return h > 0 ? `Start in ${h}h` : `Start in ${m}m`;
+  }
+
+  diff = Math.abs(diff);
+  const minutes = Math.floor(diff / 60000);
+
+  if (minutes < 110) return "Im Gange";
+
+  return "Beendet";
+}
+
+ // Check, ob alle Tipps eines Länderblocks ausgewertet sind (für grünen Haken im Header)
+function isEntryComplete(entry) {
+  // Zusatztipp → blockProfit entscheidet
+  if (entry.country === "Zusatztipp") {
+    return typeof entry.blockProfit === "number";
+  }
+
+  // Normale Tipps
+  if (!entry.tips || entry.tips.length === 0) return false;
+
+  return entry.tips.every(tip =>
+    tip.quote && tip.quote.trim() !== "" &&
+    (tip.color === "correct" || tip.color === "wrong")
+  );
+}
+
+
+
 /* ============================
    EINTRÄGE RENDERN
 ============================ */
@@ -1084,14 +1166,25 @@ header.className = "entry-header";
 
 header.innerHTML = `
   <span class="header-time">${entry.time || "--:--"}</span>
-  <span class="header-country">${
+  <span class="header-status" id="header-status-${ei}"></span>
+  <span class="header-country" style="display:inline-block; width:80px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${
     entry.country === "Zusatztipp"
       ? entry.extra?.tippster || "Zusatztipp"
       : normalizeCountry(entry.country)
   }</span>
   <span class="header-match">${entry.match || ""}</span>
+  <span class="header-check" id="header-check-${ei}"></span>
   <span class="toggle-arrow">▲</span>
+
 `;
+
+/* ⭐ HIER: Haken setzen */
+const checkEl = header.querySelector(".header-check");
+checkEl.textContent = isEntryComplete(entry) ? "✔️" : "";
+
+/* ⭐ Countdown in den Header hängen */
+const statusEl = header.querySelector(".header-status");
+statusEl.textContent = getHeaderStatus(entry);
 
 /* ⭐ Profitbox in den Header hängen */
 header.appendChild(totalBox);
@@ -1243,8 +1336,32 @@ h2.querySelector(".info-country").onclick = async () => {
 };
 
 
-// An Welchen Tagen sind Tipps für Land vorhanden
+// ============================
+// Tage für ein Land ermitteln
+// ============================
+function getDaysForCountry(country) {
+  const result = [];
 
+  for (const day in days) {
+    const dayObj = days[day];
+    if (!dayObj.entries) continue;
+
+    for (const entry of dayObj.entries) {
+      if (entry.country === country) {
+        result.push(day);
+        break; // Tag nur einmal hinzufügen
+      }
+    }
+  }
+
+  return result;
+}
+
+
+
+// ============================
+// Overlay Info Tage mit Tipps zum Land anzeigen
+// ============================
 function showDaysForCountry(country, days) {
   const title = document.getElementById("daysForCountryTitle");
   const list = document.getElementById("daysForCountryList");
@@ -1267,10 +1384,25 @@ function showDaysForCountry(country, days) {
   document.getElementById("daysForCountryOverlay").style.display = "flex";
 }
 
+// ============================
+// Overlay Info Tage mit Tipps zum Land schließen
+// ============================
 document.getElementById("closeDaysForCountry").onclick = () => {
   document.getElementById("daysForCountryOverlay").style.display = "none";
 };
 
+// ============================
+// GLOBALER CLICK-LISTENER
+// ============================
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest(".country-days-info");
+  if (!btn) return;
+
+  const country = btn.dataset.country;
+  const days = getDaysForCountry(country);
+
+  showDaysForCountry(country, days);
+});
 
 
 // ⭐⭐⭐ DELETE-BUTTON FÜR DEN GESAMTEN BLOCK (hier einfügen!)
@@ -1441,28 +1573,29 @@ row.querySelector(".btn-neutral").onclick = () => {
 };
 
 
-  row.querySelector(".btn-reset").onclick = () => {
-  entry.tips.forEach((t, idx) => {
-    t.color = "reset";
-    rtdb.ref(`days/${loadedDay}/entries/${ei}/tips/${idx}/color`).set("reset");
-  });
+row.querySelector(".btn-reset").onclick = () => {
+  // Tipp-Farben zurücksetzen (nur wenn Tipps existieren)
+  if (Array.isArray(entry.tips)) {
+    entry.tips.forEach((t, idx) => {
+      t.color = "reset";
+      rtdb.ref(`days/${loadedDay}/entries/${ei}/tips/${idx}/color`).set("reset");
+    });
+  }
 
-  extra.quoteGesamt = "";
-  extra.einsatz = "";
-  quoteInput.value = "";
-  einsatzInput.value = "";
+  // Zusatztipp-Extra-Felder zurücksetzen (nur wenn Zusatztipp)
+  if (entry.country === "Zusatztipp") {
+    if (!entry.extra) entry.extra = {};
+  }
 
+  // CSS-Klassen entfernen
   row.classList.remove("tip-correct", "tip-wrong", "tip-neutral");
 
+  // Nur die kleinen Berechnungen aktualisieren
   updateExtraTotal();
   updateDayTotal();
-  updateCountryUI();
-  updateStats();
-  updateExtraStats();
-  updateCountryStats();
-  updateCountryStatsDetailed();
-  updateAmpeln();
 };
+
+
 
 
   content.appendChild(row);
@@ -1655,9 +1788,6 @@ row.querySelector(".btn-correct").onclick = () => {
   tip.color = "correct";
   updateTipRowBackground(tip, row);
 
-  // ⭐ Farbe in RTDB speichern
-  rtdb.ref(`days/${loadedDay}/entries/${ei}/tips/${ti}/color`).set("correct");
-
   updateProfit();
   updateTotal();
   updateDayTotal();
@@ -1672,9 +1802,6 @@ row.querySelector(".btn-correct").onclick = () => {
 row.querySelector(".btn-wrong").onclick = () => {
   tip.color = "wrong";
   updateTipRowBackground(tip, row);
-
-  // ⭐ Farbe in RTDB speichern
-  rtdb.ref(`days/${loadedDay}/entries/${ei}/tips/${ti}/color`).set("wrong");
 
   updateProfit();
   updateTotal();
@@ -1691,9 +1818,6 @@ row.querySelector(".btn-neutral").onclick = () => {
   tip.color = "neutral";
   updateTipRowBackground(tip, row);
 
-  // ⭐ Farbe in RTDB speichern
-  rtdb.ref(`days/${loadedDay}/entries/${ei}/tips/${ti}/color`).set("neutral");
-
   updateProfit();
   updateTotal();
   updateDayTotal();
@@ -1709,11 +1833,6 @@ row.querySelector(".btn-reset").onclick = () => {
   tip.color = "reset";
   updateTipRowBackground(tip, row);
 
-  // ⭐ Farbe in RTDB speichern
-  rtdb.ref(`days/${loadedDay}/entries/${ei}/tips/${ti}/color`).set("reset");
-
-  tip.quote = "";
-  quoteInput.value = "";
   profitDisplay.textContent = "";
 
   updateTotal();
@@ -1935,6 +2054,8 @@ document.getElementById("loadSelectedDay").onclick = async () => {
     if (snap.exists()) {
 
       const data = snap.val();
+
+      days[day] = data;
 
       // ⭐ Tages-Einsatz laden
       baseStakeInput.value = data.baseStake || 0;
@@ -2262,580 +2383,312 @@ document.getElementById("chkShowZusatztipps").onchange = (e) => {
 ============================ */
 
 /* ============================
-   SMART PARSER KLASSE
+   Erkennung der Buchmacher
 ============================ */
 
-class SmartBetSlipParser {
-
-  constructor() {
-    this.NOISE_WORDS = [
-      "BOOST", "WETTSTEUER", "MAGENTA", "SPORT", "LIVE", "GRATIS", "AKTUELL"
-    ];
-
-    this.MARKETS = {
-      BTTS: /BEIDE TEAMS TREFFEN/i,
-      OVER_UNDER: /(ÜBER|UNTER|OVER|UNDER)/i,
-      HANDICAP: /HANDICAP/i,
-      RESULT: /(SIEG|1X2)/i,
-      PLAYER: /(PUNKTE|ASSISTS|REBOUNDS|FREIWÜRFE)/i
-    };
-  }
-
-  normalize(text) {
-    return text
-      .replace(/€/g, " EUR ")
-      .replace(/,/g, ".")
-      .replace(/\s+/g, " ")
-      .trim();
-  }
-
-  removeNoise(tokens) {
-    return tokens.filter(t =>
-      !this.NOISE_WORDS.some(n => t.toUpperCase().includes(n))
-    );
-  }
-
-  segmentSlips(text) {
-    const markers = ["WETTSCHEIN-NR", "Match Kombi", "Gesamteinsatz"];
-    const regex = new RegExp(`(${markers.join("|")})`, "g");
-
-    const parts = text.split(regex);
-    const slips = [];
-
-    for (let i = 1; i < parts.length; i += 2) {
-      slips.push(parts[i] + " " + parts[i + 1]);
-    }
-
-    return slips.length ? slips : [text];
-  }
-
-  parse(text) {
-    const normalized = this.normalize(text);
-    const slips = this.segmentSlips(normalized);
-    return slips.map(slip => this.parseSingleSlip(slip));
-  }
-
-  parseSingleSlip(text) {
-    const tokens = this.removeNoise(text.split(/\s+/));
-    const meta = this.extractMeta(text);
-    const bets = this.extractBets(tokens);
-
-    return {
-      ...meta,
-      type: bets.length > 1 ? "combo" : "single",
-      bets
-    };
-  }
-
-  extractMeta(text) {
-    const betIdMatch = text.match(/WETTSCHEIN-NR\.?\s*(\d+)/i);
-    const stakeMatch = text.match(/(\d+(\.\d+)?)\s*EUR/i);
-    const winMatch = text.match(/Gewinn\s*(\d+(\.\d+)?)/i);
-    const totalOddsMatch = text.match(/Gesamtquote\s*(\d+(\.\d+)?)/i);
-
-    return {
-      bet_id: betIdMatch ? betIdMatch[1] : null,
-      stake: stakeMatch ? parseFloat(stakeMatch[1]) : null,
-      possible_win: winMatch ? parseFloat(winMatch[1]) : (stakeMatch ? parseFloat(stakeMatch[1]) : null),
-      total_odds: totalOddsMatch ? parseFloat(totalOddsMatch[1]) : null
-    };
-  }
-
-  isOdds(token) {
-    return /^\d+\.\d+$/.test(token);
-  }
-
-  classifyMarket(text) {
-    for (const key in this.MARKETS) {
-      if (this.MARKETS[key].test(text)) return key;
-    }
-    return "UNKNOWN";
-  }
-
-extractBets(tokens) {
-  const bets = [];
-  let buffer = [];
-
-  for (let i = 0; i < tokens.length; i++) {
-    const t = tokens[i];
-
-    // Quote gefunden → kompletter Bet abgeschlossen
-    if (this.isOdds(t)) {
-      const odds = parseFloat(t);
-
-      // Buffer enthält: [team1, team2, market]
-      if (buffer.length >= 3) {
-        const team1 = buffer[0];
-        const team2 = buffer[1];
-        const market = buffer.slice(2).join(" ");
-
-        bets.push({
-          event: `${team1} vs ${team2}`,
-          market,
-          market_type: this.classifyMarket(market),
-          odds
-        });
-      }
-
-      buffer = [];
-      continue;
-    }
-
-    // Teamnamen erkennen (großgeschrieben, keine Zahlen)
-    if (/^[A-Za-zÄÖÜäöüß&.\-]+$/.test(t)) {
-      buffer.push(t);
-      continue;
-    }
-
-    // Marktbestandteile
-    if (this.classifyMarket(t) !== "UNKNOWN") {
-      buffer.push(t);
-      continue;
-    }
-  }
-
-  return bets;
-}
-
-}
-
-/* Instanz */
-const smartParser = new SmartBetSlipParser();
-
-
-function isAltBookmakerSlip(text) {
+function detectSlipType(rawText) {
+  const text = rawText.replace(/\r/g, "");
   const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+  const lower = text.toLowerCase();
 
-  return (
-    lines[0].includes("vs") &&                     // Teamzeile oben
-    lines.some(l => /offen/i.test(l)) &&           // Status
-    lines.some(l => /^\d+([.,]\d+)?$/.test(l)) &&  // Quote
-    lines.some(l => /€\s*\d/.test(l))              // Einsatz/Gewinn
-  );
-}
-
-
-function parseAltBookmakerSlip(text) {
-  const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
-
-// TEAMZEILE (erste echte vs-Zeile)
-const teamLine = lines.find(l =>
-  /vs/i.test(l) &&
-  !l.startsWith("X ") &&
-  !l.startsWith("(")
-);
-
-// Falls keine Teamzeile gefunden → Parser abbrechen
-if (!teamLine) {
-  console.warn("Keine Teamzeile gefunden:", lines);
-  return {
-    type: "unbekannt",
-    error: "Keine Teamzeile gefunden",
-    raw: text
-  };
-}
-
-const [team1, team2] = teamLine.split(/vs\.?/i).map(s => s.trim());
-
-
-  // STATUS
-  const offenIndex = lines.findIndex(l => /offen/i.test(l));
-
-  // TIPP (erste Zeile nach OFFEN)
-  const tipp = lines[offenIndex + 1] || "";
-
-  // MARKT (alle Zeilen bis zur nächsten Zahl)
-  let markt = "";
-  for (let i = offenIndex + 2; i < lines.length; i++) {
-    if (/^\d+([.,]\d+)?$/.test(lines[i])) break; // Quote erreicht
-    if (/€/.test(lines[i])) break;              // Einsatz erreicht
-    markt += (markt ? " " : "") + lines[i];
-  }
-
-  // QUOTE
-  const quoteLine = lines.find(l => /^\d+([.,]\d+)?$/.test(l));
-  const quote = parseFloat(quoteLine.replace(",", "."));
-
-  // EINSATZ
-  const einsatzLine = lines.find(l => /€\s*\d/.test(l));
-  const einsatz = parseFloat(einsatzLine.replace(/[^\d.,]/g, "").replace(",", "."));
-
-  // GEWINN
-  const eurLines = lines.filter(l => /€\s*\d/.test(l));
-  const gewinn = eurLines.length > 1
-    ? parseFloat(eurLines[1].replace(/[^\d.,]/g, "").replace(",", "."))
-    : 0;
-
-  return {
-  type: "einzel",
-  team1,
-  team2,
-  tipp: `${tipp} | ${markt}`,
-  quoteEinzel: quote,
-  einsatz,
-  gewinn,
-  bets: [
-    {
-      team1,
-      team2,
-      tipp: `${tipp} | ${markt}`,
-      quote
-    }
-  ]
-};
-
-}
-
-// --------------------------------------
-// NEUER SIMPLE-SLIP ERKENNER BET365
-// --------------------------------------
-function isSimpleSlip(text) {
-  const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
-
-  return (
-    lines.length >= 5 &&
-    !lines[0].includes("vs") &&
-    !lines[0].includes("@") &&
-    !lines[0].includes(" v ") &&
-    lines.some(l => /@|vs| v /i.test(l)) &&
+  // -------------------------
+  // BET365
+  // -------------------------
+  if (
+    lower.includes("einsatz") &&
+    lower.includes("gesamtgewinn") &&
     lines.some(l => /^\d+([.,]\d+)?$/.test(l)) &&
-    lines.some(l => /Einsatz/i.test(l)) &&
-    lines.some(l => /Gesamtgewinn/i.test(l))
-  );
+    !lines[0].match(/vs|@| v /i)
+  ) {
+    return { bookmaker: "bet365" };
+  }
+
+  // -------------------------
+  // 22BET
+  // -------------------------
+  if (
+    /wettschein-nr/i.test(text) &&
+    /\d+\.\s/.test(text) &&
+    lower.includes("gesamtquote")
+  ) {
+    return { bookmaker: "22bet" };
+  }
+
+  // -------------------------
+  // NEO.BET
+  // -------------------------
+  if (
+    /offen|abgeschlossen/i.test(text) &&
+    /(@|vs| v )/i.test(text) &&
+    /€\s*\d/.test(text)
+  ) {
+    return { bookmaker: "neobet" };
+  }
+
+  // -------------------------
+  // BETISTA
+  // -------------------------
+  // Hier fügen wir später die echten Erkennungsmerkmale ein
+  if (lower.includes("betista")) {
+    return { bookmaker: "betista" };
+  }
+
+// -------------------------
+// GENERIC FALLBACK
+// -------------------------
+  return { bookmaker: "generic" };
 }
 
-// --------------------------------------
-// NEUER SIMPLE-SLIP PARSER BET365
-// --------------------------------------
-function parseSimpleSlip(text) {
+// -------------------------
+// Dispatcher für die verschiedenen Parser
+// -------------------------
+
+function parseBetInput(text) {
+  const type = detectSlipType(text);
+
+  switch (type.bookmaker) {
+    case "bet365":
+      return parseBet365(text);
+
+    case "22bet":
+      return parse22bet(text);
+
+    case "neobet":
+      return parseNeoBet(text);
+
+    case "betista":
+      return parseBetista(text);
+
+    case "generic":
+    default:
+      return parseGeneric(text);
+  }
+}
+
+// -------------------------
+// Parser für einzelne Buchmacher
+// -------------------------
+
+// -------------------------
+// Parser Bet365
+// -------------------------
+
+function parseBet365(text) {
+  // später implementieren
+  return { type: "todo", bookmaker: "bet365" };
+}
+
+
+// -------------------------
+// Parser 22Bet
+// -------------------------
+
+// Single-Wette erkennen und parsen
+// -------------------------
+function parse22betSingle(text) {
   const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
 
-  // ⭐ ECHTEN TIPP FINDEN
-const tipp = lines.find(l =>
-  !/live|benachrichtig|auswahlen|top-wetten|wettsteuer|einsatz|gesamtgewinn/i.test(l) &&
-  !/€/.test(l) &&
-  !/^\d+([.,]\d+)?$/.test(l) &&
-  !/@|vs| v /i.test(l) &&
-  l.length > 2
-);
+  let team1 = "";
+  let team2 = "";
+  let marketLines = [];
+  let odds = null;
 
+  let inMarket = false;
 
-  const teamLine = lines.find(l => /@|vs| v /i.test(l));
-  const [team1, team2] = teamLine.split(/@|vs| v /i).map(s => s.trim());
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
 
-  const quoteLine = lines.find(l => /^\d+([.,]\d+)?$/.test(l));
-  const quote = parseFloat(quoteLine.replace(",", "."));
+    // Team 1: erste Zeile nach dem Sportblock, die KEIN Stern/•/% am Anfang hat
+    if (!team1 && /^[A-Za-z0-9].+/.test(line) && !/^\d+\./.test(line)) {
+      team1 = line.replace(/^[•*%]+/, "").trim();
+      continue;
+    }
 
-  const einsatzIndex = lines.findIndex(l => /Einsatz/i.test(l));
-  const einsatz = parseFloat(lines[einsatzIndex + 1].replace(/[^\d.,]/g, "").replace(",", "."));
+    // Team 2: nächste Zeile, die NICHT Quote, NICHT Markt, NICHT Gesamtquote ist
+    if (!team2 && /^[A-Za-z0-9•*%].+/.test(line) && !/^\d+\./.test(line)) {
+      // aber nur wenn es nicht dieselbe Zeile wie team1 ist
+      if (line !== team1) {
+        team2 = line.replace(/^[•*%]+/, "").trim();
+        continue;
+      }
+    }
 
-  const gewinnIndex = lines.findIndex(l => /Gesamtgewinn/i.test(l));
-  const gewinn = parseFloat(lines[gewinnIndex + 1].replace(/[^\d.,]/g, "").replace(",", "."));
+    // Markt beginnt, sobald wir eine Marktzeile erkennen
+    if (/über|unter|gesamt|handicap|1x2|treffen|ergebnis|s1|s2|ja|nein/i.test(line)) {
+      inMarket = true;
+      marketLines.push(line);
+      continue;
+    }
+
+    // Markt kann über mehrere Zeilen gehen
+    if (inMarket && !/^\d+([.,]\d+)?$/.test(line) && !/gesamtquote/i.test(line)) {
+      marketLines.push(line);
+      continue;
+    }
+
+    // Quote erkennen
+    if (!odds && /^\d+([.,]\d+)?$/.test(line)) {
+      odds = parseFloat(line.replace(",", "."));
+      continue;
+    }
+  }
+
+  // Markt zusammenbauen
+  const market = marketLines.join(" ").replace(/\s+/g, " ").trim();
+
+  // Einsatz
+  const einsatzLine = lines.find(l => /eur/i.test(l));
+  const einsatz = einsatzLine
+    ? parseFloat(einsatzLine.replace(/[^\d.,]/g, "").replace(",", "."))
+    : null;
+
+  // Gewinn
+  const eurLines = lines.filter(l => /eur/i.test(l));
+  const gewinn =
+    eurLines.length > 1
+      ? parseFloat(eurLines[1].replace(/[^\d.,]/g, "").replace(",", "."))
+      : null;
 
   return {
-    type: "einzel",
-    team1,
-    team2,
-    tipp,
-    quoteEinzel: quote,
-    einsatz,
-    gewinn,
+    bookmaker: "22bet",
+    type: "single",
     bets: [
       {
+        match: `${team1} 🆚 ${team2}`,
         team1,
         team2,
-        tipp,
-        quote
+        market,
+        odds,
+        stake: einsatz
       }
-    ]
+    ],
+    totalStake: einsatz,
+    totalOdds: odds,
+    possibleWin: gewinn
   };
 }
 
-function isKombiSlip(text) {
-  return (
-    /WETTSCHEIN-NR/i.test(text) &&
-    /\d+\.\s/.test(text) &&        // Blockstart
-    /\d+([.,]\d+)?\s*EUR/i.test(text) // Einsatz/Gewinn
-  );
-}
 
 
-/* ============================
-   UNIVERSALER PARSER FÜR WETTSCHEINE
-============================ */
-function parseBetInput(text) {
-
-  console.log("parseBetInput RAW:", text);
-
-// 1. Kombiwette zuerst prüfen
-if (isKombiSlip(text)) {
-  return parseKombiBet(text);
-}
-
-// 2. Alt-Format
-if (isAltBookmakerSlip(text)) {
-  return parseAltBookmakerSlip(text);
-}
-
-// 3. Simple Slip
-if (isSimpleSlip(text)) {
-  return parseSimpleSlip(text);
-}
-
-// ⭐ Kombiwette erkennen (NUR wenn wirklich mehrere Tipps vorhanden sind)
-// ⭐ Nur echte Quoten erkennen (zwischen 1.10 und 20.0)
-const odds = (text.match(/\d+([.,]\d+)?/g) || [])
-  .map(n => parseFloat(n.replace(",", ".")))
-  .filter(n => n >= 1.10 && n <= 20.0);   // Tippzahlen wie 42.5 werden ignoriert
-
-const oddsCount = odds.length;
 
 
-if (
-  oddsCount >= 2 ||                                   // mehrere Quoten → Kombi
-  text.toLowerCase().includes("gesamtquote") ||       // klassische Kombiwette
-  text.toLowerCase().includes("match kombi")          // manche Anbieter
-) {
-  console.log("→ Kombiwette erkannt → parseKombiBet()");
-  return parseKombiBet(text);
-}
-
-  // 2️⃣ Einzelwette → SmartParser
-  const slips = smartParser.parse(text);
-  const slip = slips[0];
-
-  if (!slip) return { type: "empty" };
-
-  if (slip.type === "single") {
-    const b = slip.bets[0];
-    return {
-      type: "einzel",
-      team1: b.event.split(" vs ")[0],
-      team2: b.event.split(" vs ")[1],
-      tipp: b.market,
-      quoteEinzel: b.odds,
-      einsatz: slip.stake,
-      gewinn: slip.possible_win
-    };
-  }
-
-  return { type: "unknown" };
-}
-
-
-// ⭐ NEUE FUNKTION HIER EINBAUEN
-function parseKombiBet(text) {
-
-  console.log("=== KOMBI-PARSER START ===");
-
-  const lines = text
-    .split("\n")
-    .map(l => l.trim())
-    .filter(l => l.length > 0);
-
-  console.log("=== ROHINPUT ===");
-  lines.forEach((l, i) => console.log(i, JSON.stringify(l)));
-  console.log("=== ENDE ROHINPUT ===");
+// Kombi-Wette erkennen und parsen
+// -------------------------
+function parse22betCombo(text) {
+  const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
 
   const bets = [];
   let current = null;
-  let stage = 0;
-
-  // Blockstart nur wenn nach der Zahl ein Leerzeichen kommt
-const isBlockStart = l =>
-  /^\d+\.\s/.test(l) ||               // klassisch: "12. ..."
-  /^[A-Za-z]\s*\d+\.\s/.test(l) ||    // "D 223748. ..."
-  /^\d+\s+\d+\.\s/.test(l) ||         // "2 205496. ..."
-  /^\(\d+\s+\d+\.\s/.test(l);         // "(2 256142. ..."
-
-
-
-  const isSportLine = l => /(Basketball|Fußball|Tennis|Handball|Eishockey)/i.test(l);
-  const isQuote = l =>
-  /^\d+([.,]\d+)?$/.test(l) &&
-  parseFloat(l.replace(",", ".")) > 1.01;
-  const isTipLine = l =>
-  /(über|unter|1x2|handicap|gesamtzahl|spielzeit|s1|s2|btts|bts|beide teams treffen|treffen|ja|nein)/i.test(l);
-  const isTeamLine = l =>
-    !isBlockStart(l) &&
-    !isSportLine(l) &&
-    !isTipLine(l) &&
-    !isQuote(l) &&
-    !/^\(.*\)$/.test(l) &&
-    l.length > 2;
-
-  console.log("=== PARSE START ===");
 
   for (const line of lines) {
+    // Blockstart: "12345."
+    if (/^\d+\.\s/.test(line)) {
+      if (current) bets.push(current);
 
-    console.log("ZEILE:", line, "| stage:", stage);
-
-    // BLOCKSTART
-    if (isBlockStart(line)) {
-      console.log("➡ BLOCKSTART erkannt:", line);
-
-      if (current && current.quote) {
-        console.log("➡ BET GESPEICHERT:", current);
-        bets.push(current);
-      }
-
-      current = { team1: "", team2: "", tipp: "", quote: "" };
-      stage = 1;
+      current = {
+        match: "",
+        team1: "",
+        team2: "",
+        market: "",
+        odds: null
+      };
       continue;
     }
 
-    if (!current) {
-      console.log("⚠ Kein aktiver Block – übersprungen");
+    if (!current) continue;
+
+    // Team 1
+    if (!current.team1 && /^[A-Za-z0-9].+/.test(line) && !line.includes("*")) {
+      current.team1 = line;
       continue;
     }
 
-    // SPORTZEILE
-    if (stage === 1 && isSportLine(line)) {
-      console.log("➡ SPORTZEILE erkannt:", line);
+    // Team 2 (mit *)
+    if (!current.team2 && line.startsWith("*")) {
+      current.team2 = line.replace("*", "").trim();
       continue;
     }
 
-    // TEAM 1
-    if (stage === 1 && isTeamLine(line)) {
-      console.log("➡ TEAM 1 erkannt:", line);
-      current.team1 = line.replace(/^&/, "");
-      stage = 2;
+    // Markt
+    if (!current.market && /-|über|unter|1x2|handicap|gesamt/i.test(line)) {
+      current.market = line;
       continue;
     }
 
-    // TEAM 2
-    if (stage === 2 && isTeamLine(line)) {
-      console.log("➡ TEAM 2 erkannt:", line);
-      current.team2 = line.replace(/^&/, "");
-      stage = 3;
+    // Quote
+    if (!current.odds && /^\d+([.,]\d+)?$/.test(line)) {
+      current.odds = parseFloat(line.replace(",", "."));
       continue;
     }
-
-// ⭐ MEHRZEILIGE MARKT-/TIPP-ERKENNUNG + NORMALISIERUNG
-if (stage === 3 && isTipLine(line)) {
-  console.log("➡ MARKTZEILE erkannt:", line);
-
-  // Bindestrich am Ende entfernen
-  let clean = line.replace(/-\s*$/, "").trim();
-
-  // ⭐ NEUE ERWEITERUNG:
-  // "UND GU" → "UND GESAMTZAHL UNTER"
-  clean = clean.replace(/\bGU\b/i, "GESAMTZAHL UNTER");
-
-  // "UND GO" → "UND GESAMTZAHL ÜBER" (falls später gebraucht)
-  clean = clean.replace(/\bGO\b/i, "GESAMTZAHL ÜBER");
-
-  // "S1" → "S1" (optional später erweiterbar)
-  // "S2" → "S2"
-
-  // Erste Marktzeile setzen oder anhängen
-  if (!current.tipp) {
-    current.tipp = clean;
-  } else {
-    current.tipp += " " + clean;
   }
 
-  continue;
-}
+  // letzten Block speichern
+  if (current) bets.push(current);
 
+  // Einsatz & Gewinn
+  const einsatz = parseFloat(
+    (lines.find(l => /eur/i.test(l)) || "").replace(/[^\d.,]/g, "").replace(",", ".")
+  );
 
+  const gewinn = parseFloat(
+    (lines.find(l => /eur/i.test(l) && !l.includes("Einsatz")) || "").replace(/[^\d.,]/g, "").replace(",", ".")
+  );
 
-    // QUOTE
-    if (isQuote(line)) {
-      console.log("➡ QUOTE erkannt:", line);
-      current.quote = parseFloat(line.replace(",", "."));
-      stage = 4;
-      continue;
-    }
+  // Gesamtquote
+  const totalOdds = parseFloat(
+    (lines.find(l => /^\d+([.,]\d+)?$/.test(l) && !bets.some(b => b.odds === parseFloat(l.replace(",", ".")))) || "")
+      .replace(",", ".")
+  );
 
-    console.log("⚠ NICHT ERKANNT:", line);
-  }
-
-  // Letzten Block speichern
-  if (current && current.quote) {
-    console.log("➡ LETZTER BET GESPEICHERT:", current);
-    bets.push(current);
-  }
-
-  console.log("=== BETS NACH PARSING ===", bets);
-
-  /* ============================
-     ROBUSTE META-ERKENNUNG
-  ============================= */
-
-  // Gesamtquote = erste Zahl nach "Gesamtquote"
-  let quoteGesamt = "";
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].toLowerCase().includes("gesamtquote")) {
-      for (let j = i + 1; j < lines.length; j++) {
-        if (/^\d+([.,]\d+)?$/.test(lines[j])) {
-          quoteGesamt = parseFloat(lines[j].replace(",", "."));
-          break;
-        }
-      }
-    }
-  }
-  console.log("➡ Gesamtquote:", quoteGesamt);
-
-  // ⭐ Einsatz erkennen (auch wenn er auf der nächsten Zeile steht)
-let einsatz = "";
-for (let i = 0; i < lines.length; i++) {
-
-  // Fall 1: klassische Form "12.50 EUR"
-  if (/^\d+([.,]\d+)?\s*eur$/i.test(lines[i])) {
-    einsatz = parseFloat(lines[i].replace(/[^\d.,]/g, "").replace(",", "."));
-    break;
-  }
-
-  // Fall 2: neue Form:
-  // "Einsatz"
-  // "€0,50"
-  if (lines[i].toLowerCase().startsWith("einsatz")) {
-    const next = lines[i + 1]?.replace(/[^\d.,]/g, "").replace(",", ".");
-    if (next && !isNaN(parseFloat(next))) {
-      einsatz = parseFloat(next);
-      break;
-    }
-  }
-}
-console.log("➡ Einsatz:", einsatz);
-
-
-  // Gewinn = zweite Zeile mit "EUR"
-// ⭐ Gewinn erkennen (auch wenn er auf der nächsten Zeile steht)
-let gewinn = "";
-
-for (let i = 0; i < lines.length; i++) {
-
-  // Klassisch: "12.50 EUR"
-  if (/^\d+([.,]\d+)?\s*eur$/i.test(lines[i])) {
-    const val = parseFloat(lines[i].replace(/[^\d.,]/g, "").replace(",", "."));
-    if (!einsatz) einsatz = val; // falls Einsatz vorher nicht erkannt wurde
-    else gewinn = val;           // zweiter EUR-Wert = Gewinn
-  }
-
-  // Neue Form:
-  // "Gesamtgewinn"
-  // "€0,90"
-  if (lines[i].toLowerCase().includes("gesamtgewinn")) {
-    const next = lines[i + 1]?.replace(/[^\d.,]/g, "").replace(",", ".");
-    if (next && !isNaN(parseFloat(next))) {
-      gewinn = parseFloat(next);
-    }
-  }
-}
-
-console.log("➡ Gewinn:", gewinn);
-
+  // Match-Felder erzeugen
+  bets.forEach(b => {
+    b.match = `${b.team1} 🆚 ${b.team2}`;
+  });
 
   return {
-    type: "kombi",
+    bookmaker: "22bet",
+    type: "combo",
     bets,
-    quoteGesamt,
-    einsatz,
-    gewinn
+    totalStake: einsatz || null,
+    totalOdds: totalOdds || null,
+    possibleWin: gewinn || null
   };
 }
+
+
+
+
+// -------------------------
+// Parser NeoBet
+// -------------------------
+
+function parseNeoBet(text) {
+  // später implementieren
+  return { type: "todo", bookmaker: "neobet" };
+}
+
+
+
+// -------------------------
+// Parser Betista
+// -------------------------
+
+function parseBetista(text) {
+  // später implementieren
+  return { type: "todo", bookmaker: "betista" };
+}
+
+
+// -------------------------
+// Parser Generic
+// -------------------------
+
+function parseGeneric(text) {
+  // später implementieren
+  return { type: "todo", bookmaker: "generic" };
+}
+
+
 
 /* ============================
    PARSER ENDE
