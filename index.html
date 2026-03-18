@@ -987,20 +987,64 @@ document.getElementById("btnTipsterImport").onclick = async () => {
   }
 
   const parsed = parseBetInput(raw);
+
+/* ============================
+   PARSER NORMALISIEREN
+============================ */
+
+// NICHTS überschreiben – nur sicherstellen, dass nichts undefined ist
+parsed.bets = parsed.bets.map(b => ({
+  ...b,
+  team1: b.team1 ?? "",
+  team2: b.team2 ?? "",
+  market: b.market ?? "",
+  odds: b.odds ?? null,
+  stake: b.stake ?? null
+}));
+
+
+parsed.totalStake = parsed.totalStake ?? parsed.einsatz;
+parsed.possibleWin = parsed.possibleWin ?? parsed.gewinn;
+parsed.totalOdds = parsed.totalOdds ?? parsed.quoteGesamt;
+
+parsed.type = parsed.type === "kombi" ? "combo" : parsed.type;
+
+
   console.log("Parser Ergebnis:", parsed);
 
   const tippster = document.getElementById("tipsterSelect").value;
 
-  // MATCHNAME bestimmen
-  let matchName = "";
+  /* ============================
+       MATCHNAME bestimmen
+  ============================= */
 
-  if (parsed.type === "einzel") {
-    matchName = `${parsed.team1} - ${parsed.team2}`;
-  }
+let matchName = "";
 
-  if (parsed.type === "kombi") {
-    matchName = "Kombiwette (" + parsed.bets.length + " Tipps)";
-  }
+const b = parsed.bets[0];
+
+// Match immer aus team1 + team2 erzeugen
+const safeTeam1 = (b.team1 || "").replace("* ", "");
+const safeTeam2 = b.team2 || "";
+matchName = `${safeTeam1} – ${safeTeam2}`;
+
+
+if (parsed.type === "single" || parsed.type === "kombi") {
+  // gleicher Code
+}
+
+// ============================
+// BETS absichern (kein undefined erlauben)
+// ============================
+parsed.bets = parsed.bets.map(b => ({
+  ...b,
+  market: b.market ?? "",
+  team1: b.team1 ?? b.match?.split(" 🆚 ")[0] ?? "",
+  team2: b.team2 ?? b.match?.split(" 🆚 ")[1] ?? "",
+  tipp: b.tipp ?? "",
+  odds: b.odds ?? null,
+  quote: b.quote ?? null
+}));
+
 
 // EIN EINZIGER BLOCK
 const entry = {
@@ -1008,22 +1052,21 @@ const entry = {
   match: matchName,
   time: "",
 
-  // ⭐ WICHTIG: Tipps korrekt befüllen
   tips:
-    parsed.type === "einzel"
+    parsed.type === "single"
       ? [
           {
-            label: `${parsed.team1} - ${parsed.team2}`,
-            value: parsed.tipp,
-            quote: parsed.quoteEinzel,
+            label: parsed.bets[0].market,
+            value: "",
+            quote: parsed.bets[0].odds,
             color: "reset",
             favorite: true
           }
         ]
       : parsed.bets.map(b => ({
-          label: `${b.team1} - ${b.team2}`,
-          value: b.tipp,
-          quote: b.quote,
+          label: b.market,
+          value: "",
+          quote: b.odds,
           color: "reset",
           favorite: true
         })),
@@ -1031,12 +1074,13 @@ const entry = {
   extra: {
     type: parsed.type,
     bets: parsed.bets || [],
-    einsatz: parsed.einsatz,
-    gewinn: parsed.gewinn,
-    quoteGesamt: parsed.quoteGesamt || parsed.quoteEinzel,
+    einsatz: parsed.totalStake,
+    gewinn: parsed.possibleWin || 0,
+    quoteGesamt: parsed.totalOdds,
     tippster
   }
 };
+
 
 
   // In Liste einfügen
@@ -1049,10 +1093,10 @@ const entry = {
     type: parsed.type,
     bets: parsed.bets || [],
     tipp: parsed.tipp || "",
-    quoteEinzel: parsed.quoteEinzel || "",
-    quoteGesamt: parsed.quoteGesamt || "",
-    einsatz: parsed.einsatz || "",
-    gewinn: parsed.gewinn || "",
+    quoteEinzel: parsed.bets[0].odds || "",
+    quoteGesamt: parsed.totalOdds || "",
+    einsatz: parsed.totalStake || "",
+    gewinn: parsed.possibleWin || "",
     tippster,
     created: Date.now()
   });
@@ -1113,8 +1157,10 @@ function getHeaderStatus(entry) {
 function isEntryComplete(entry) {
   // Zusatztipp → blockProfit entscheidet
   if (entry.country === "Zusatztipp") {
-    return typeof entry.blockProfit === "number";
+  // Fertig nur, wenn mindestens ein Tipp NICHT "reset" ist
+  return entry.tips?.some(t => t.color && t.color !== "reset");
   }
+
 
   // Normale Tipps
   if (!entry.tips || entry.tips.length === 0) return false;
@@ -1265,11 +1311,7 @@ const h2 = document.createElement("h2");
 
 h2.innerHTML = `
 <span class="country-text">
-  ${
-    entry.country === "Zusatztipp"
-      ? entry.extra?.tippster || "Zusatztipp"
-      : normalizeCountry(entry.country)
-  }
+ ${entry.match}
 </span>
 
   <span class="edit-country" data-id="${ei}">✏️</span>
@@ -1450,8 +1492,8 @@ row.innerHTML = `
   <span class="tip-label" style="font-size:14px;">
     ${bets
       .map(b => `
-        <strong>${b.team1} - ${b.team2}</strong><br>
-        ${b.tipp} (Quote: ${b.quote})<br><br>
+       <strong>${b.market}</strong><br>
+        (Quote: ${b.odds})<br><br>
       `)
       .join("")}
   </span>
@@ -2483,6 +2525,38 @@ function parseBet365(text) {
 // Parser 22Bet
 // -------------------------
 
+function extractTeamName(line) {
+  const match = line.match(/[\p{L}][\p{L}\p{M}0-9 .-]*/u);
+  return match ? match[0].trim() : line.trim();
+}
+
+function parse22bet(text) {
+  const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+
+  // Alle Zeilen, die wie Tippblöcke aussehen: "12345."
+  const blockLines = lines.filter(l => /^\d+\.\s/.test(l));
+
+  // Wenn es MEHR ALS EINEN Block gibt → Kombiwette
+  if (blockLines.length > 1) {
+    return parse22betCombo(text);
+  }
+
+  // Wenn es nur EINEN Block gibt, aber NICHT der erste Tippblock ist → Single
+  if (blockLines.length === 1) {
+    const idx = lines.indexOf(blockLines[0]);
+
+    // Wenn der Block NICHT direkt nach der Wettschein-Nr kommt → Single
+    if (idx > 2) {
+      return parse22betSingle(text);
+    }
+  }
+
+  // Standard: Single
+  return parse22betSingle(text);
+}
+
+
+
 // Single-Wette erkennen und parsen
 // -------------------------
 function parse22betSingle(text) {
@@ -2498,49 +2572,104 @@ function parse22betSingle(text) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Team 1: erste Zeile nach dem Sportblock, die KEIN Stern/•/% am Anfang hat
-    if (!team1 && /^[A-Za-z0-9].+/.test(line) && !/^\d+\./.test(line)) {
-      team1 = line.replace(/^[•*%]+/, "").trim();
-      continue;
-    }
+   // ============================
+// TEAMERKENNUNG
+// ============================
 
-    // Team 2: nächste Zeile, die NICHT Quote, NICHT Markt, NICHT Gesamtquote ist
-    if (!team2 && /^[A-Za-z0-9•*%].+/.test(line) && !/^\d+\./.test(line)) {
-      // aber nur wenn es nicht dieselbe Zeile wie team1 ist
-      if (line !== team1) {
-        team2 = line.replace(/^[•*%]+/, "").trim();
-        continue;
-      }
-    }
+// Team 1 erkennen
+if (
+  !team1 &&
+  /[A-ZÄÖÜ]/.test(line) &&                     // enthält Großbuchstaben
+  !/^wettschein/i.test(line) &&                // NICHT "WETTSCHEIN-NR"
+  !/^\d+\./.test(line) &&                      // NICHT "12345."
+  !/basketball|nba|football|soccer|tennis|hockey/i.test(line) && // keine Sportart
+  !/gesamtquote|wetteinsatz|möglicher gewinn|einzelwette/i.test(line)
+) {
+  team1 = extractTeamName(line);
+  continue;
+}
 
-    // Markt beginnt, sobald wir eine Marktzeile erkennen
-    if (/über|unter|gesamt|handicap|1x2|treffen|ergebnis|s1|s2|ja|nein/i.test(line)) {
-      inMarket = true;
-      marketLines.push(line);
-      continue;
-    }
+// Team 2 erkennen
+if (
+  team1 &&                                     // Team 1 MUSS existieren
+  !team2 &&
+  /[A-ZÄÖÜ]/.test(line) &&
+  !/^wettschein/i.test(line) &&
+  !/^\d+\./.test(line) &&
+  !/basketball|nba|football|soccer|tennis|hockey/i.test(line) &&
+  !/gesamtquote|wetteinsatz|möglicher gewinn|einzelwette/i.test(line)
+) {
+  team2 = extractTeamName(line);
+  continue;
+}
 
-    // Markt kann über mehrere Zeilen gehen
-    if (inMarket && !/^\d+([.,]\d+)?$/.test(line) && !/gesamtquote/i.test(line)) {
-      marketLines.push(line);
-      continue;
-    }
+
+
+// Markt beginnt – erweitert für Spezialmärkte
+if (
+  !inMarket &&
+  /handicap|über|unter|gesamt\s|1x2|treffen|ergebnis|minute|tor|bis|chance|ja|nein/i.test(line)
+) {
+  inMarket = true;
+  marketLines.push(line);
+  continue;
+}
+
+// Markt endet bei Meta-Zeilen (WICHTIG: Stop-Wörter prüfen, bevor wir pushen!)
+if (inMarket) {
+  // Stop-Wörter → Markt endet
+  if (
+    /^\d+([.,]\d+)?$/.test(line) ||
+    /eur/i.test(line) ||
+    /gesamtquote|wetteinsatz|möglicher gewinn|einzelwette|wettart/i.test(line)
+  ) {
+    inMarket = false;
+    continue;
+  }
+
+  // Wenn die Zeile wie eine Marktzeile aussieht → anhängen
+  if (/tor|minute|bis|ja|nein|handicap|über|unter/i.test(line)) {
+    marketLines.push(line);
+    continue;
+  }
+
+  // Sonst Markt beenden
+  inMarket = false;
+}
+
+
+
+
 
     // Quote erkennen
-    if (!odds && /^\d+([.,]\d+)?$/.test(line)) {
-      odds = parseFloat(line.replace(",", "."));
-      continue;
+  // Erste Zahl mit Punkt/Komma nach dem Markt ist die Quote
+    if (!odds && /^\d+([.,]\d{2,3})$/.test(line)) {
+    odds = parseFloat(line.replace(",", "."));
+    continue;
     }
+
   }
 
   // Markt zusammenbauen
-  const market = marketLines.join(" ").replace(/\s+/g, " ").trim();
+ let market = marketLines.join(" ").replace(/\s+/g, " ").trim();
+  if (!market) market = "";
 
-  // Einsatz
-  const einsatzLine = lines.find(l => /eur/i.test(l));
-  const einsatz = einsatzLine
-    ? parseFloat(einsatzLine.replace(/[^\d.,]/g, "").replace(",", "."))
-    : null;
+  // Einsatz = erste EUR-Zeile NACH "Einzelwette"
+  let einsatz = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    if (/einzelwette/i.test(lines[i])) {
+    // nächste Zeile mit EUR ist der Einsatz
+    for (let j = i + 1; j < lines.length; j++) {
+      if (/eur/i.test(lines[j])) {
+        einsatz = parseFloat(lines[j].replace(/[^\d.,]/g, "").replace(",", "."));
+        break;
+      }
+    }
+    break;
+    }
+  }
+
 
   // Gewinn
   const eurLines = lines.filter(l => /eur/i.test(l));
@@ -2557,7 +2686,7 @@ function parse22betSingle(text) {
         match: `${team1} 🆚 ${team2}`,
         team1,
         team2,
-        market,
+        market: market || "",
         odds,
         stake: einsatz
       }
