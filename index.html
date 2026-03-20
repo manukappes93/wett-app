@@ -161,6 +161,7 @@
 
 .edit-country {
   cursor: pointer;
+  font-size: 26px !important;
   margin-left: 8px;
   font-size: 18px;
   opacity: 0.7;
@@ -259,6 +260,7 @@ select {
 
 .info-country {
   cursor: pointer;
+  font-size: 26px !important;
   margin-left: 8px;
   font-size: 20px;
   opacity: 0.7;
@@ -270,6 +272,7 @@ select {
 
 .delete-extra-btn {
   background: #ff4d4d;
+  font-size: 26px !important;
   color: white;
   border: none;
   padding: 6px 12px;
@@ -280,6 +283,7 @@ select {
 
 .edit-extra-btn {
   background: #4da6ff;
+  font-size: 26px !important;
   color: white;
   border: none;
   padding: 6px 12px;
@@ -330,6 +334,16 @@ select {
 
 .entry-header div:last-child {
   margin-left: auto;
+}
+
+.country-days-info {
+  font-size: 32px !important;
+  background: #eef3ff;
+  border-radius: 50%;
+  padding: 4px 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
   </style>
@@ -992,15 +1006,20 @@ document.getElementById("btnTipsterImport").onclick = async () => {
    PARSER NORMALISIEREN
 ============================ */
 
-// NICHTS überschreiben – nur sicherstellen, dass nichts undefined ist
-parsed.bets = parsed.bets.map(b => ({
-  ...b,
-  team1: b.team1 ?? "",
-  team2: b.team2 ?? "",
-  market: b.market ?? "",
-  odds: b.odds ?? null,
-  stake: b.stake ?? null
-}));
+// parsed.bets sicherstellen
+parsed.bets = Array.isArray(parsed.bets)
+  ? parsed.bets
+      .filter(b => b && typeof b === "object") // entfernt undefined / null / falsche Typen
+      .map(b => ({
+        ...b,
+        team1: b.team1 ?? "",
+        team2: b.team2 ?? "",
+        market: b.market ?? "",
+        odds: b.odds ?? null,
+        stake: b.stake ?? null
+      }))
+  : [];
+
 
 
 parsed.totalStake = parsed.totalStake ?? parsed.einsatz;
@@ -1165,9 +1184,9 @@ function isEntryComplete(entry) {
   // Normale Tipps
   if (!entry.tips || entry.tips.length === 0) return false;
 
-  return entry.tips.every(tip =>
-    tip.quote && tip.quote.trim() !== "" &&
-    (tip.color === "correct" || tip.color === "wrong")
+ return entry.tips.every(tip =>
+  tip.quote && tip.quote.trim() !== "" &&
+  (tip.color === "correct" || tip.color === "wrong" || tip.color === "neutral")
   );
 }
 
@@ -1180,307 +1199,228 @@ function renderEntries() {
   sortEntries();
   output.innerHTML = "";
 
-currentEntries.forEach((entry, ei) => {
+  currentEntries.forEach((entry, ei) => {
 
-  // 2. FILTER: Ländertipps ausblenden
-  if (!showLaendertipps && entry.country !== "Zusatztipp") {
-    return;
-  }
+    // 2. FILTER: Ländertipps ausblenden
+    if (!showLaendertipps && entry.country !== "Zusatztipp") return;
 
-  // 3. FILTER: Zusatztipps ausblenden
-  if (!showZusatztipps && entry.country === "Zusatztipp") {
-    return;
-  }
+    // 3. FILTER: Zusatztipps ausblenden
+    if (!showZusatztipps && entry.country === "Zusatztipp") return;
 
-const div = document.createElement("div");
-div.className = "entry";
+    const div = document.createElement("div");
+    div.className = "entry";
 
-/* ⭐ Profitbox zuerst erzeugen */
-const totalBox = document.createElement("div");
-totalBox.style.cssText =
-  "padding:6px 10px; border-radius:6px; background:#ddd; font-weight:bold; text-align:right;";
-totalBox.textContent = "0.00 €";
+    /* ⭐ Profitbox */
+    const totalBox = document.createElement("div");
+    totalBox.style.cssText =
+      "padding:6px 10px; border-radius:6px; background:#ddd; font-weight:bold; text-align:right;";
+    totalBox.textContent = "0.00 €";
 
-/* ⭐ Content-Wrapper */
-const content = document.createElement("div");
-content.className = "entry-content";
-content.style.display = "block"; // Standard: offen
+    /* ⭐ Content-Wrapper */
+    const content = document.createElement("div");
+    content.className = "entry-content";
 
-/* ⭐ Header */
-const header = document.createElement("div");
-header.className = "entry-header";
+    /* ⭐ Header */
+    const header = document.createElement("div");
+    header.className = "entry-header";
 
-header.innerHTML = `
-  <span class="header-time">${entry.time || "--:--"}</span>
-  <span class="header-status" id="header-status-${ei}"></span>
-  <span class="header-country" style="display:inline-block; width:80px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${
-    entry.country === "Zusatztipp"
-      ? entry.extra?.tippster || "Zusatztipp"
-      : normalizeCountry(entry.country)
-  }</span>
-  <span class="header-match">${entry.match || ""}</span>
-  <span class="header-check" id="header-check-${ei}"></span>
-  <span class="toggle-arrow">▲</span>
+    header.innerHTML = `
+      <span class="header-time">${entry.time || "--:--"}</span>
+      <span class="header-status" id="header-status-${ei}" style="display:inline-block; width:100px; overflow:hidden; white-space:nowrap;"></span>
+      <span class="header-country" style="display:inline-block; width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+        ${
+          entry.country === "Zusatztipp"
+            ? entry.extra?.tippster || "Zusatztipp"
+            : normalizeCountry(entry.country)
+        }
+      </span>
+      <span class="header-match">${entry.match || ""}</span>
+      <span class="header-check" id="header-check-${ei}"></span>
+      <span class="toggle-arrow">▲</span>
+    `;
 
-`;
+    /* ⭐⭐ HIER KOMMT DER KOMBI-HEADER HIN ⭐⭐ */
+    if (entry.country === "Zusatztipp") {
+   const extra = entry.extra || {};
+   const isKombi = ["kombi", "combo", "accumulator"].includes(extra.type);
+   const bets = Array.isArray(extra.bets) ? extra.bets : [];
 
-/* ⭐ HIER: Haken setzen */
-const checkEl = header.querySelector(".header-check");
-checkEl.textContent = isEntryComplete(entry) ? "✔️" : "";
+    if (isKombi) {
+    const matchSpan = header.querySelector(".header-match");
+    matchSpan.textContent = `Kombi-Wette – ${bets.length} Tipp${bets.length > 1 ? "e" : ""}`;
+    }
+    }
+/* ⭐⭐ KOMBI-HEADER ENDE ⭐⭐ */
 
-/* ⭐ Countdown in den Header hängen */
-const statusEl = header.querySelector(".header-status");
-statusEl.textContent = getHeaderStatus(entry);
+    /* ⭐ Haken setzen */
+    header.querySelector(".header-check").textContent =
+      isEntryComplete(entry) ? "✔️" : "";
 
-/* ⭐ Profitbox in den Header hängen */
-header.appendChild(totalBox);
+    /* ⭐ Countdown */
+    header.querySelector(".header-status").textContent =
+      getHeaderStatus(entry);
 
-/* ⭐ Toggle-Logik */
-let isOpen = entry.isOpen !== undefined ? entry.isOpen : true;
+    /* ⭐ Profitbox in Header */
+    header.appendChild(totalBox);
 
-// ⭐ UI initial setzen
-content.style.display = isOpen ? "block" : "none";
-header.querySelector(".toggle-arrow").textContent = isOpen ? "▼" : "▲";
+    /* ⭐ Toggle */
+    let isOpen = entry.isOpen ?? true;
+    content.style.display = isOpen ? "block" : "none";
+    header.querySelector(".toggle-arrow").textContent = isOpen ? "▼" : "▲";
 
-header.onclick = () => {
-  isOpen = !isOpen;
+    header.onclick = () => {
+      isOpen = !isOpen;
+      content.style.display = isOpen ? "block" : "none";
+      header.querySelector(".toggle-arrow").textContent = isOpen ? "▼" : "▲";
+      entry.isOpen = isOpen;
+    };
 
-  // UI aktualisieren
-  content.style.display = isOpen ? "block" : "none";
-  header.querySelector(".toggle-arrow").textContent = isOpen ? "▼" : "▲";
+    div.appendChild(header);
+    div.appendChild(content);
 
-  // ⭐ Zustand lokal speichern
-  entry.isOpen = isOpen;
-};
+    /* ⭐ Block einfärben */
+    if (entry.blockProfit > 0) {
+      div.style.border = "3px solid #4CAF50";
+      div.style.backgroundColor = "#e8ffe8";
+    } else if (entry.blockProfit < 0) {
+      div.style.border = "3px solid #F44336";
+      div.style.backgroundColor = "#ffe5e5";
+    } else {
+      div.style.border = "1px solid #ccc";
+      div.style.backgroundColor = "white";
+    }
 
-/* ⭐ Header + Content in den Block */
-div.appendChild(header);
-div.appendChild(content);
+    /* ⭐ Wrapper für Zeit + Countdown */
+    const timeWrapper = document.createElement("div");
+    timeWrapper.style.display = "flex";
+    timeWrapper.style.alignItems = "center";
+    timeWrapper.style.gap = "8px";
 
+    /* ⭐ Zeitfeld */
+    const timeInput = document.createElement("input");
+    timeInput.type = "time";
+    timeInput.className = "time-input";
+    timeInput.value = entry.time || "";
 
+    timeInput.addEventListener("focus", () => (isTimePickerOpen = true));
+    timeInput.addEventListener("input", () => (isTimePickerOpen = true));
 
-    // ⭐ Länderblock einfärben nach Tages-Profit
-if (entry.blockProfit > 0) {
-  div.style.border = "3px solid #4CAF50";
-  div.style.backgroundColor = "#e8ffe8";
-} else if (entry.blockProfit < 0) {
-  div.style.border = "3px solid #F44336";
-  div.style.backgroundColor = "#ffe5e5";
-} else {
-  div.style.border = "1px solid #ccc";
-  div.style.backgroundColor = "white";
-}
+    timeInput.addEventListener("blur", () => {
+      if (timeInput.value?.length === 5) entry.time = timeInput.value;
+      isTimePickerOpen = false;
+      sortEntries();
+      renderEntries();
+    });
 
-   const timeInput = document.createElement("input");
-timeInput.type = "time";
-timeInput.className = "time-input";
-timeInput.value = entry.time || "";
+    timeWrapper.appendChild(timeInput);
 
-// Countdown pausieren, sobald das Feld geöffnet wird
-timeInput.addEventListener("focus", () => {
-  isTimePickerOpen = true;
-});
-
-// Während der Eingabe KEIN Re-Render
-timeInput.addEventListener("input", () => {
-  isTimePickerOpen = true;
-});
-
-// Erst wenn das Feld verlassen wird → übernehmen + rendern
-timeInput.addEventListener("blur", () => {
-  const v = timeInput.value;
-
-  if (v && v.length === 5) {
-    entry.time = v;
-  }
-
-  isTimePickerOpen = false;
-  sortEntries();
-  renderEntries();
-});
-
-    content.appendChild(timeInput);
-
+    /* ⭐ Countdown */
     const cd = document.createElement("div");
     cd.className = "countdown";
     cd.id = "countdown-" + ei;
     cd.textContent = "–";
-    content.appendChild(cd);
 
-const h2 = document.createElement("h2");
+    timeWrapper.appendChild(cd);
 
-h2.innerHTML = `
-<span class="country-text">
- ${entry.match}
-</span>
-
-  <span class="edit-country" data-id="${ei}">✏️</span>
-
-  ${entry.country === "Zusatztipp"
-    ? `<span class="delete-entry" data-id="${ei}" style="cursor:pointer; margin-left:6px;">🗑️</span>`
-    : ""}
-
-  <span class="info-country" data-id="${ei}">ℹ️</span>
-`;
-
-content.appendChild(h2);
-
-// ⭐ Edit-Button Logik eindeutig setzen
-const editBtn = h2.querySelector(".edit-country");
-
-// Wichtig: Erst alle alten Events entfernen
-editBtn.replaceWith(editBtn.cloneNode(true));
-const newEditBtn = h2.querySelector(".edit-country");
-
-newEditBtn.onclick = () => {
-  if (entry.country === "Zusatztipp") {
-    // Zusatztipp → eigenes Overlay öffnen
-    editExtraTip(entry, ei);
-    return;
-  }
-
-  // Normales Land bearbeiten
-const newCountry = prompt("Neues Land:", entry.country);
-if (newCountry !== null && newCountry.trim() !== "") {
-    entry.country = normalizeCountry(newCountry);
-    renderEntries();
-}
-
-};
-
-// Info-Icon Event
-h2.querySelector(".info-country").onclick = async () => {
-  const country = normalizeCountry(entry.country);
-
-  // ⭐ Globale Statistik neu berechnen
-  const stats = await calculateGlobalCountryStats();
-
-  // ⭐ Globale Statistik rendern (wie beim Button)
-  renderCountryStats(stats);
-
-  // ⭐ Overlay öffnen
-  document.getElementById("countryStatsOverlay").style.display = "flex";
-
-  // ⭐ Suchfeld automatisch füllen
-  const searchInput = document.getElementById("countrySearch");
-  searchInput.value = country.toLowerCase();
-
-  // ⭐ Auto-Focus (optional)
-  searchInput.focus();
-
-  // ⭐ Filterung sofort ausführen
-  const boxes = document.querySelectorAll("#countryStatsContent .country-box");
-
-  boxes.forEach(box => {
-    const countryName = box.querySelector("h3").textContent.toLowerCase();
-    box.style.display = countryName.includes(country.toLowerCase()) ? "block" : "none";
-  });
-};
+    /* ⭐ Wrapper einfügen */
+    content.appendChild(timeWrapper);
 
 
-// ============================
-// Tage für ein Land ermitteln
-// ============================
-function getDaysForCountry(country) {
-  const result = [];
-
-  for (const day in days) {
-    const dayObj = days[day];
-    if (!dayObj.entries) continue;
-
-    for (const entry of dayObj.entries) {
-      if (entry.country === country) {
-        result.push(day);
-        break; // Tag nur einmal hinzufügen
+    /* ⭐ Titel */
+    const h2 = document.createElement("h2");
+    h2.innerHTML = `
+      <span class="country-text">
+      ${entry.country === "Zusatztipp"
+      ? (entry.extra?.tippster || "Zusatztipp")
+      : normalizeCountry(entry.country)
       }
+
+      </span>
+
+      <span class="edit-country" data-id="${ei}">✏️</span>
+
+      ${
+        entry.country === "Zusatztipp"
+          ? `<span class="delete-entry" data-id="${ei}" style="cursor:pointer; margin-left:6px;">🗑️</span>`
+          : ""
+      }
+
+      <span class="info-country" data-id="${ei}">ℹ️</span>
+    `;
+    content.appendChild(h2);
+
+    /* ⭐ Edit-Button */
+    const editBtn = h2.querySelector(".edit-country");
+    editBtn.replaceWith(editBtn.cloneNode(true));
+    const newEditBtn = h2.querySelector(".edit-country");
+
+    newEditBtn.onclick = () => {
+      if (entry.country === "Zusatztipp") {
+        editExtraTip(entry, ei);
+        return;
+      }
+      const newCountry = prompt("Neues Land:", entry.country);
+      if (newCountry?.trim()) {
+        entry.country = normalizeCountry(newCountry);
+        renderEntries();
+      }
+    };
+
+    /* ⭐ Info-Button */
+    h2.querySelector(".info-country").onclick = async () => {
+      const country = normalizeCountry(entry.country);
+      const stats = await calculateGlobalCountryStats();
+      renderCountryStats(stats);
+
+      document.getElementById("countryStatsOverlay").style.display = "flex";
+
+      const searchInput = document.getElementById("countrySearch");
+      searchInput.value = country.toLowerCase();
+      searchInput.focus();
+
+      document
+        .querySelectorAll("#countryStatsContent .country-box")
+        .forEach((box) => {
+          const name = box.querySelector("h3").textContent.toLowerCase();
+          box.style.display = name.includes(country.toLowerCase())
+            ? "block"
+            : "none";
+        });
+    };
+
+    /* ⭐ Delete-Button */
+    const delBtn = h2.querySelector(".delete-entry");
+    if (delBtn) {
+      delBtn.onclick = () => {
+        if (!confirm("Willst du diesen Zusatztipp wirklich löschen?")) return;
+        currentEntries.splice(ei, 1);
+        renderEntries();
+      };
     }
-  }
 
-  return result;
-}
-
-
-
-// ============================
-// Overlay Info Tage mit Tipps zum Land anzeigen
-// ============================
-function showDaysForCountry(country, days) {
-  const title = document.getElementById("daysForCountryTitle");
-  const list = document.getElementById("daysForCountryList");
-
-  title.textContent = `Tage mit Tipps für ${country}`;
-  list.innerHTML = "";
-
-  if (days.length === 0) {
-    list.innerHTML = "<p>Keine Tage gefunden.</p>";
-  } else {
-    days.forEach(day => {
-      const div = document.createElement("div");
-      div.textContent = day;
-      div.className = "day-entry";
-      div.style.padding = "6px 0";
-      list.appendChild(div);
-    });
-  }
-
-  document.getElementById("daysForCountryOverlay").style.display = "flex";
-}
-
-// ============================
-// Overlay Info Tage mit Tipps zum Land schließen
-// ============================
-document.getElementById("closeDaysForCountry").onclick = () => {
-  document.getElementById("daysForCountryOverlay").style.display = "none";
-};
-
-// ============================
-// GLOBALER CLICK-LISTENER
-// ============================
-document.addEventListener("click", (e) => {
-  const btn = e.target.closest(".country-days-info");
-  if (!btn) return;
-
-  const country = btn.dataset.country;
-  const days = getDaysForCountry(country);
-
-  showDaysForCountry(country, days);
-});
-
-
-// ⭐⭐⭐ DELETE-BUTTON FÜR DEN GESAMTEN BLOCK (hier einfügen!)
-const delBtn = h2.querySelector(".delete-entry");
-if (delBtn) {
-  delBtn.onclick = () => {
-    if (!confirm("Willst du diesen Zusatztipp wirklich löschen?")) return;
-
-    currentEntries.splice(ei, 1);
-    renderEntries();
-  };
-}
-
-
-if (entry.country !== "Zusatztipp") {
-  const p = document.createElement("p");
-  p.innerHTML = "<strong>Spielpaarung:</strong> " + (entry.match || "");
-  content.appendChild(p);
-}
+    /* ⭐ Spielpaarung */
+    if (entry.country !== "Zusatztipp") {
+      const p = document.createElement("p");
+      p.innerHTML =
+        "<strong>Spielpaarung:</strong> " + (entry.match || "");
+      content.appendChild(p);
+    }
 
 /* ============================
-   Zusatztipps RENDERN8 Start
+   Zusatztipps RENDERN
 ============================ */
 if (entry.country === "Zusatztipp") {
-
   const extra = entry.extra || {};
-  const isKombi = extra.type === "kombi";
-  const bets = extra.bets || [];
+  const isKombi = ["kombi", "combo", "accumulator"].includes(extra.type);
+  const bets = Array.isArray(extra.bets) ? extra.bets : [];
 
-  // 🔹 2) Eine einzige Zeile wie bei Ländertipps
   const row = document.createElement("div");
   row.className = "tip-row";
   row.dataset.entryIndex = ei;
 
   row.style.display = "grid";
-  row.style.gridTemplateColumns = "1fr 80px 80px auto auto auto auto";
+  row.style.gridTemplateColumns =
+    "minmax(260px, 3fr) 80px 80px auto auto auto auto";
   row.style.alignItems = "center";
   row.style.gap = "12px";
   row.style.marginTop = "10px";
@@ -1488,52 +1428,194 @@ if (entry.country === "Zusatztipp") {
   const einsatzValue = extra.einsatz || "";
   const quoteValue = extra.quoteGesamt || "";
 
-row.innerHTML = `
-  <span class="tip-label" style="font-size:14px;">
-    ${bets
-      .map(b => `
-       <strong>${b.market}</strong><br>
-        (Quote: ${b.odds})<br><br>
-      `)
-      .join("")}
-  </span>
+  /* =====================================================
+     ⭐ KOMBI-ZUSATZTIPP
+     ===================================================== */
+  if (isKombi) {
+    row.innerHTML = `
+      <span class="tip-label" style="font-size:12px; line-height:1.3; display:block; width:100%;">
+        <strong>Kombi-Wette</strong><br>
+        ${bets.length} Tipp${bets.length > 1 ? "e" : ""}
+      </span>
 
-  <input type="number" step="0.01" class="quote-input" 
-         value="${quoteValue}" 
-         style="font-size:18px; font-weight:bold; width:80px;">
+      <input type="number" step="0.01" class="quote-input" 
+             value="${quoteValue}" 
+             style="font-size:18px; font-weight:bold; width:80px;">
 
- <div style="display:flex; align-items:center; gap:4px;">
-  <input type="number" step="0.01" class="einsatz-input" 
-         value="${einsatzValue}" 
-         style="font-size:16px; width:70px; text-align:right;">
-  <span>€</span>
-</div>
+      <div style="display:flex; align-items:center; gap:4px;">
+        <input type="number" step="0.01" class="einsatz-input" 
+               value="${einsatzValue}" 
+               style="font-size:16px; width:70px; text-align:right;">
+        <span>€</span>
+      </div>
+    `;
 
+    content.appendChild(row);
 
-  <button class="btn-correct">✔️</button>
-  <button class="btn-wrong">❌</button>
-  <button class="btn-neutral">➖</button>
-  <button class="btn-reset">⭯</button>
-`;
+    function applyTipColor(div2, color) {
+      if (color === "correct") div2.style.background = "#d4f8d4";
+      else if (color === "wrong") div2.style.background = "#ffd4d4";
+      else div2.style.background = "#f7f7f7";
+    }
 
-// ⭐ Hintergrundfarbe beim Laden setzen (Zusatztipp)
-const anyColor = entry.tips.find(t => t.color !== "reset");
+    function applyKombiColor() {
+      row.classList.remove("tip-correct", "tip-wrong", "tip-neutral");
+      if (entry.color === "correct") row.classList.add("tip-correct");
+      else if (entry.color === "wrong") row.classList.add("tip-wrong");
+      else if (entry.color === "neutral") row.classList.add("tip-neutral");
+    }
 
-row.classList.remove("tip-correct", "tip-wrong", "tip-neutral");
+    bets.forEach((b, bi) => {
+      const tipDiv = document.createElement("div");
+      tipDiv.className = "extra-tip-line";
+      tipDiv.style.margin = "8px 0 0 0";
+      tipDiv.style.padding = "10px 12px";
+      tipDiv.style.borderRadius = "4px";
+      tipDiv.style.border = "1px solid #ddd";
 
-if (anyColor) {
-  if (anyColor.color === "correct") row.classList.add("tip-correct");
-  if (anyColor.color === "wrong")   row.classList.add("tip-wrong");
-  if (anyColor.color === "neutral") row.classList.add("tip-neutral");
-}
+      tipDiv.innerHTML = `
+        <div style="font-size:15px; margin-bottom:4px;">
+          <strong>${b.team1} – ${b.team2}</strong>
+        </div>
+
+        <div style="font-size:14px; margin-bottom:6px;">
+          <em>${b.market}</em>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:14px;"><strong>Quote:</strong> ${b.odds ?? "-"}</span>
+
+          <button class="btn-sub-correct" data-bi="${bi}">✔️</button>
+          <button class="btn-sub-wrong" data-bi="${bi}">❌</button>
+          <button class="btn-sub-neutral" data-bi="${bi}">➖</button>
+        </div>
+      `;
+
+      applyTipColor(tipDiv, b.color);
+      content.appendChild(tipDiv);
+    });
+
+    function updateKombiStatus() {
+      const allCorrect = bets.every(b => b.color === "correct");
+      const anyWrong = bets.some(b => b.color === "wrong");
+
+      if (anyWrong) entry.color = "wrong";
+      else if (allCorrect) entry.color = "correct";
+      else entry.color = "neutral";
+
+      applyKombiColor();
+    }
+
+    function updateExtraTotalKombi() {
+      const einsatz = parseFloat(extra.einsatz || 0);
+      const quote = parseFloat(extra.quoteGesamt || 0);
+      let total = 0;
+
+      if (entry.color === "correct") total = quote * einsatz - einsatz;
+      else if (entry.color === "wrong") total = -einsatz;
+
+      entry.blockProfit = total;
+
+      totalBox.textContent = total.toFixed(2) + " €";
+      totalBox.style.backgroundColor =
+        total > 0 ? "#c8ffcc" : total < 0 ? "#ffcccc" : "#ddd";
+    }
+
+    content.querySelectorAll(".btn-sub-correct").forEach(btn => {
+      btn.onclick = () => {
+        const bi = btn.dataset.bi;
+        bets[bi].color = "correct";
+        applyTipColor(btn.closest(".extra-tip-line"), "correct");
+        updateKombiStatus();
+        updateExtraTotalKombi();
+        updateDayTotal();
+        updateStats();
+      };
+    });
+
+    content.querySelectorAll(".btn-sub-wrong").forEach(btn => {
+      btn.onclick = () => {
+        const bi = btn.dataset.bi;
+        bets[bi].color = "wrong";
+        applyTipColor(btn.closest(".extra-tip-line"), "wrong");
+        updateKombiStatus();
+        updateExtraTotalKombi();
+        updateDayTotal();
+        updateStats();
+      };
+    });
+
+    content.querySelectorAll(".btn-sub-neutral").forEach(btn => {
+      btn.onclick = () => {
+        const bi = btn.dataset.bi;
+        bets[bi].color = "neutral";
+        applyTipColor(btn.closest(".extra-tip-line"), "neutral");
+        updateKombiStatus();
+        updateExtraTotalKombi();
+        updateDayTotal();
+        updateStats();
+      };
+    });
+
+    updateKombiStatus();
+    updateExtraTotalKombi();
+
+    output.appendChild(div);
+    bindDeleteButtons();
+    return;
+  }
+
+  /* =====================================================
+     ⭐ SINGLE-ZUSATZTIPP
+     ===================================================== */
+
+  row.innerHTML = `
+    <span class="tip-label" style="font-size:12px; line-height:1.3; display:block; width:100%;">
+      <strong>${entry.match || ""}</strong><br><br>
+      ${bets
+        .map(
+          (b) => `
+            <em>${b.market}</em>
+          `
+        )
+        .join("<br><br>")}
+    </span>
+
+    <input type="number" step="0.01" class="quote-input" 
+           value="${quoteValue}" 
+           style="font-size:18px; font-weight:bold; width:80px;">
+
+    <div style="display:flex; align-items:center; gap:4px;">
+      <input type="number" step="0.01" class="einsatz-input" 
+             value="${einsatzValue}" 
+             style="font-size:16px; width:70px; text-align:right;">
+      <span>€</span>
+    </div>
+
+    <button class="btn-correct">✔️</button>
+    <button class="btn-wrong">❌</button>
+    <button class="btn-neutral">➖</button>
+    <button class="btn-reset">⭯</button>
+  `;
+
+  content.appendChild(row);
+
+  const anyColor = entry.tips.find((t) => t.color !== "reset");
+
+  row.classList.remove("tip-correct", "tip-wrong", "tip-neutral");
+
+  if (anyColor) {
+    if (anyColor.color === "correct") row.classList.add("tip-correct");
+    if (anyColor.color === "wrong") row.classList.add("tip-wrong");
+    if (anyColor.color === "neutral") row.classList.add("tip-neutral");
+  }
 
   const quoteInput = row.querySelector(".quote-input");
   const einsatzInput = row.querySelector(".einsatz-input");
 
-  // ⭐ Gesamtquote ändern
   quoteInput.oninput = () => {
     extra.quoteGesamt = parseFloat(quoteInput.value || 0);
-    updateExtraTotal();
+    updateExtraTotalSingle();
     updateDayTotal();
     updateCountryUI();
     updateStats();
@@ -1542,148 +1624,134 @@ if (anyColor) {
     updateCountryStatsDetailed();
   };
 
-  // ⭐ Einsatz ändern
   einsatzInput.oninput = () => {
     extra.einsatz = parseFloat(einsatzInput.value || 0);
-    updateExtraTotal();
+    updateExtraTotalSingle();
     updateDayTotal();
-  updateCountryUI();
+    updateCountryUI();
     updateStats();
     updateExtraStats();
     updateCountryStats();
     updateCountryStatsDetailed();
   };
 
-  // ⭐ Bewertung für gesamte Wette
-row.querySelector(".btn-correct").onclick = () => {
-  entry.tips.forEach((t, idx) => {
-    t.color = "correct";
-    rtdb.ref(`days/${loadedDay}/entries/${ei}/tips/${idx}/color`).set("correct");
-  });
+  row.querySelector(".btn-correct").onclick = () => {
+    entry.tips.forEach((t, idx) => {
+      t.color = "correct";
+      rtdb
+        .ref(`days/${loadedDay}/entries/${ei}/tips/${idx}/color`)
+        .set("correct");
+    });
 
-  row.classList.remove("tip-wrong", "tip-neutral");
-  row.classList.add("tip-correct");
+    row.classList.remove("tip-wrong", "tip-neutral");
+    row.classList.add("tip-correct");
 
-  updateExtraTotal();
-  updateDayTotal();
-  updateCountryUI();
-  updateStats();
-  updateExtraStats();
-  updateCountryStats();
-  updateCountryStatsDetailed();
-  updateAmpeln();
-};
-
+    updateExtraTotalSingle();
+    updateDayTotal();
+    updateCountryUI();
+    updateStats();
+    updateExtraStats();
+    updateCountryStats();
+    updateCountryStatsDetailed();
+    updateAmpeln();
+  };
 
   row.querySelector(".btn-wrong").onclick = () => {
-  entry.tips.forEach((t, idx) => {
-    t.color = "wrong";
-    rtdb.ref(`days/${loadedDay}/entries/${ei}/tips/${idx}/color`).set("wrong");
-  });
+    entry.tips.forEach((t, idx) => {
+      t.color = "wrong";
+      rtdb
+        .ref(`days/${loadedDay}/entries/${ei}/tips/${idx}/color`)
+        .set("wrong");
+    });
 
-  row.classList.remove("tip-correct", "tip-neutral");
-  row.classList.add("tip-wrong");
+    row.classList.remove("tip-correct", "tip-neutral");
+    row.classList.add("tip-wrong");
 
-  updateExtraTotal();
-  updateDayTotal();
-  updateCountryUI();
-  updateStats();
-  updateExtraStats();
-  updateCountryStats();
-  updateCountryStatsDetailed();
-  updateAmpeln();
-};
+    updateExtraTotalSingle();
+    updateDayTotal();
+    updateCountryUI();
+    updateStats();
+    updateExtraStats();
+    updateCountryStats();
+    updateCountryStatsDetailed();
+    updateAmpeln();
+  };
 
+  row.querySelector(".btn-neutral").onclick = () => {
+    entry.tips.forEach((t, idx) => {
+      t.color = "neutral";
+      rtdb
+        .ref(`days/${loadedDay}/entries/${ei}/tips/${idx}/color`)
+        .set("neutral");
+    });
 
-row.querySelector(".btn-neutral").onclick = () => {
-  entry.tips.forEach((t, idx) => {
-    t.color = "neutral";
-    rtdb.ref(`days/${loadedDay}/entries/${ei}/tips/${idx}/color`).set("neutral");
-  });
+    row.classList.remove("tip-correct", "tip-wrong");
+    row.classList.add("tip-neutral");
 
-  row.classList.remove("tip-correct", "tip-wrong");
-  row.classList.add("tip-neutral");
+    document.getElementById(`header-check-${ei}`).textContent = "✔️";
 
-  updateExtraTotal();
-  updateDayTotal();
-  updateCountryUI();
-  updateStats();
-  updateExtraStats();
-  updateCountryStats();
-  updateCountryStatsDetailed();
-  updateAmpeln();
-};
+    updateExtraTotalSingle();
+    updateDayTotal();
+    updateCountryUI();
+    updateStats();
+    updateExtraStats();
+    updateCountryStats();
+    updateCountryStatsDetailed();
+    updateAmpeln();
+  };
 
-
-row.querySelector(".btn-reset").onclick = () => {
-  // Tipp-Farben zurücksetzen (nur wenn Tipps existieren)
-  if (Array.isArray(entry.tips)) {
+  row.querySelector(".btn-reset").onclick = () => {
     entry.tips.forEach((t, idx) => {
       t.color = "reset";
-      rtdb.ref(`days/${loadedDay}/entries/${ei}/tips/${idx}/color`).set("reset");
+      rtdb
+        .ref(`days/${loadedDay}/entries/${ei}/tips/${idx}/color`)
+        .set("reset");
     });
-  }
 
-  // Zusatztipp-Extra-Felder zurücksetzen (nur wenn Zusatztipp)
-  if (entry.country === "Zusatztipp") {
-    if (!entry.extra) entry.extra = {};
-  }
+    row.classList.remove("tip-correct", "tip-wrong", "tip-neutral");
 
-  // CSS-Klassen entfernen
-  row.classList.remove("tip-correct", "tip-wrong", "tip-neutral");
+    updateExtraTotalSingle();
+    updateDayTotal();
+  };
 
-  // Nur die kleinen Berechnungen aktualisieren
-  updateExtraTotal();
-  updateDayTotal();
-};
+  function updateExtraTotalSingle() {
+    const einsatz = parseFloat(extra.einsatz || 0);
+    let total = 0;
 
+    const quote = parseFloat(extra.quoteGesamt || 0);
+    const anyColor = entry.tips.find(
+      (t) => t.color && t.color !== "reset"
+    );
 
+    if (anyColor) {
+      if (anyColor.color === "correct")
+        total += quote * einsatz - einsatz;
+      else if (anyColor.color === "wrong") total -= einsatz;
+    }
 
+    entry.blockProfit = total;
 
-  content.appendChild(row);
+    totalBox.textContent = total.toFixed(2) + " €";
+    totalBox.style.backgroundColor =
+      total > 0 ? "#c8ffcc" : total < 0 ? "#ffcccc" : "#ddd";
 
-  // ⭐ Block-Profit wie bei Ländertipps
-function updateExtraTotal() {
-  const einsatz = parseFloat(extra.einsatz || 0);
-  let total = 0;
+    const entryBlock = document.querySelectorAll(".entry")[ei];
 
-  const quote = parseFloat(extra.quoteGesamt || 0);
-  const anyColor = entry.tips.find(t => t.color && t.color !== "reset");
-
-  if (anyColor) {
-    const state = anyColor.color;
-    if (state === "correct") {
-      total += (quote * einsatz) - einsatz;
-    } else if (state === "wrong") {
-      total -= einsatz;
+    if (entryBlock) {
+      if (total > 0) {
+        entryBlock.style.border = "3px solid #4CAF50";
+        entryBlock.style.backgroundColor = "#e8ffe8";
+      } else if (total < 0) {
+        entryBlock.style.border = "3px solid #F44336";
+        entryBlock.style.backgroundColor = "#ffe5e5";
+      } else {
+        entryBlock.style.border = "1px solid #ccc";
+        entryBlock.style.backgroundColor = "white";
+      }
     }
   }
 
-  entry.blockProfit = total;
-
-  totalBox.textContent = total.toFixed(2) + " €";
-  totalBox.style.backgroundColor =
-    total > 0 ? "#c8ffcc" : total < 0 ? "#ffcccc" : "#ddd";
-
-  // ⭐ Rahmen SOFORT aktualisieren
-  const entryBlock = document.querySelectorAll(".entry")[ei];
-
-  if (entryBlock) {
-    if (total > 0) {
-      entryBlock.style.border = "3px solid #4CAF50";
-      entryBlock.style.backgroundColor = "#e8ffe8";
-    } else if (total < 0) {
-      entryBlock.style.border = "3px solid #F44336";
-      entryBlock.style.backgroundColor = "#ffe5e5";
-    } else {
-      entryBlock.style.border = "1px solid #ccc";
-      entryBlock.style.backgroundColor = "white";
-    }
-  }
-}
-
-
-  updateExtraTotal();
+  updateExtraTotalSingle();
 
   output.appendChild(div);
   bindDeleteButtons();
@@ -1695,90 +1763,82 @@ function updateExtraTotal() {
 ============================ */
 
 
-function updateTotal() {
-  const stake = parseFloat(baseStakeInput.value || 0);
-  let total = 0;
+    /* ⭐ Normale Tipps rendern */
+    function updateTotal() {
+      const stake = parseFloat(baseStakeInput.value || 0);
+      let total = 0;
 
-  // ⭐ Nur Favoriten auswerten
-  entry.tips
-    .filter(tip => tip.favorite)
-    .forEach(tip => {
-      const quote = parseFloat(tip.quote || 0);
+      entry.tips
+        .filter((tip) => tip.favorite)
+        .forEach((tip) => {
+          const quote = parseFloat(tip.quote || 0);
 
-      if (tip.color === "correct") {
-        total += (quote * stake) - stake;
-      } else if (tip.color === "wrong") {
-        total -= stake;
+          if (tip.color === "correct") total += quote * stake - stake;
+          else if (tip.color === "wrong") total -= stake;
+        });
+
+      entry.blockProfit = total;
+
+      totalBox.textContent = total.toFixed(2) + " €";
+      totalBox.style.backgroundColor =
+        total > 0 ? "#c8ffcc" : total < 0 ? "#ffcccc" : "#ddd";
+
+      updateEntryBorder(ei);
+    }
+
+    entry.tips.forEach((tip, ti) => {
+      const row = document.createElement("div");
+      row.className = "tip-row";
+      row.dataset.entryIndex = ei;
+      row.dataset.tipIndex = ti;
+
+      if (tip.favorite) row.classList.add("tip-favorite");
+
+      updateTipRowBackground(tip, row);
+
+      const tipType = getTipType(tip);
+      const country = entry.country;
+
+      let ampelColor = "#ccc";
+
+      if (
+        countryStatsDetailed[country] &&
+        countryStatsDetailed[country][tipType]
+      ) {
+        const profit =
+          countryStatsDetailed[country][tipType].profit;
+        if (profit > 0) ampelColor = "#4CAF50";
+        else if (profit < 0) ampelColor = "#F44336";
       }
-    });
 
-  // ⭐ Profit speichern
-  entry.blockProfit = total;
-
-  totalBox.textContent = total.toFixed(2) + " €";
-  totalBox.style.backgroundColor =
-    total > 0 ? "#c8ffcc" : total < 0 ? "#ffcccc" : "#ddd";
-
-  // ⭐ HIER: Rahmen sofort aktualisieren
-  updateEntryBorder(ei);
-}
-
-
-entry.tips.forEach((tip, ti) => {
-  const row = document.createElement("div");
-  row.className = "tip-row";
-  row.dataset.entryIndex = ei;
-  row.dataset.tipIndex = ti;
-
-  // ⭐ Favoriten wiederherstellen
-if (tip.favorite) {
-  row.classList.add("tip-favorite");
-}
-
-  // ⭐ gespeicherte Bewertung wiederherstellen
- updateTipRowBackground(tip, row);
-
-
-  const tipType = getTipType(tip);
-  const country = entry.country;
-
-  let ampelColor = "#ccc";
-
-  if (countryStatsDetailed[country] && countryStatsDetailed[country][tipType]) {
-    const profit = countryStatsDetailed[country][tipType].profit;
-    if (profit > 0) ampelColor = "#4CAF50";
-    else if (profit < 0) ampelColor = "#F44336";
-  }
-  
-row.innerHTML = `
-  <span class="tip-ampel" style="background:${ampelColor};"></span>
-  <button class="btn-fav" style="font-size:20px; background:none; border:none; cursor:pointer;">
-    ${tip.favorite ? "⭐" : "☆"}
-  </button>
-  <span class="tip-label"><strong>${tip.label}:</strong> ${tip.value}</span>
-  <input type="number" step="0.01" class="quote-input" style="font-size:18px; font-weight:bold;">
-  <span class="profit-display"></span>
-  <button class="btn-correct">✔️</button>
-  <button class="btn-wrong">❌</button>
-  <button class="btn-neutral">➖</button>
-  <button class="btn-reset">⭯</button>
-`;
+            row.innerHTML = `
+        <span class="tip-ampel" style="background:${ampelColor};"></span>
+        <button class="btn-fav" style="font-size:20px; background:none; border:none; cursor:pointer;">
+          ${tip.favorite ? "⭐" : "☆"}
+        </button>
+        <span class="tip-label"><strong>${tip.label}:</strong> ${tip.value}</span>
+        <input type="number" step="0.01" class="quote-input" style="font-size:18px; font-weight:bold;">
+        <span class="profit-display"></span>
+        <button class="btn-correct">✔️</button>
+        <button class="btn-wrong">❌</button>
+        <button class="btn-neutral">➖</button>
+        <button class="btn-reset">⭯</button>
+      `;
 
       const quoteInput = row.querySelector(".quote-input");
       const profitDisplay = row.querySelector(".profit-display");
-const favBtn = row.querySelector(".btn-fav");
+      const favBtn = row.querySelector(".btn-fav");
 
-favBtn.onclick = () => {
-  tip.favorite = !tip.favorite;
-  favBtn.textContent = tip.favorite ? "⭐" : "☆";
-  row.style.border = tip.favorite ? "2px solid gold" : "1px solid #ccc";
-  updateStats();
-  updateExtraStats();
-  updateCountryStats();
-  updateDayTotal();
-  updateCountryUI();
-};
-
+      favBtn.onclick = () => {
+        tip.favorite = !tip.favorite;
+        favBtn.textContent = tip.favorite ? "⭐" : "☆";
+        row.style.border = tip.favorite ? "2px solid gold" : "1px solid #ccc";
+        updateStats();
+        updateExtraStats();
+        updateCountryStats();
+        updateDayTotal();
+        updateCountryUI();
+      };
 
       quoteInput.value = tip.quote || "";
 
@@ -1805,103 +1865,103 @@ favBtn.onclick = () => {
         }
 
         if (tip.color === "correct") {
-          const profit = (quote * stake) - stake;
+          const profit = quote * stake - stake;
           profitDisplay.textContent = profit.toFixed(2) + " €";
           profitDisplay.style.backgroundColor = "#c8ffcc";
         }
       }
 
-quoteInput.oninput = () => {
-  tip.quote = quoteInput.value;
-  updateProfit();
-  updateExtraTotal();
-  updateTotal();
-  updateDayTotal();
-  updateCountryUI();
-  updateStats();
-  updateExtraStats();
-  updateCountryStats();
-  updateCountryStats();
-  updateCountryStatsDetailed();
-  updateAmpeln();
-};
+      quoteInput.oninput = () => {
+        tip.quote = quoteInput.value;
+        updateProfit();
+        updateExtraTotal?.();   // falls definiert (bei Zusatztipp nicht relevant)
+        updateTotal();
+        updateDayTotal();
+        updateCountryUI();
+        updateStats();
+        updateExtraStats();
+        updateCountryStats();
+        updateCountryStatsDetailed();
+        updateAmpeln();
+      };
 
-row.querySelector(".btn-correct").onclick = () => {
-  tip.color = "correct";
-  updateTipRowBackground(tip, row);
+      row.querySelector(".btn-correct").onclick = () => {
+        tip.color = "correct";
+        updateTipRowBackground(tip, row);
 
-  updateProfit();
-  updateTotal();
-  updateDayTotal();
-  updateCountryUI();
-  updateStats();
-  updateExtraStats();
-  updateCountryStats();
-  updateCountryStats();
-  updateCountryStatsDetailed();
-};
+        updateProfit();
+        updateTotal();
+        updateDayTotal();
+        updateCountryUI();
+        updateStats();
+        updateExtraStats();
+        updateCountryStats();
+        updateCountryStatsDetailed();
+      };
 
-row.querySelector(".btn-wrong").onclick = () => {
-  tip.color = "wrong";
-  updateTipRowBackground(tip, row);
+      row.querySelector(".btn-wrong").onclick = () => {
+        tip.color = "wrong";
+        updateTipRowBackground(tip, row);
 
-  updateProfit();
-  updateTotal();
-  updateDayTotal();
-  updateCountryUI();
-  updateStats();
-  updateExtraStats();
-  updateCountryStats();
-  updateCountryStats();
-  updateCountryStatsDetailed();
-};
+        updateProfit();
+        updateTotal();
+        updateDayTotal();
+        updateCountryUI();
+        updateStats();
+        updateExtraStats();
+        updateCountryStats();
+        updateCountryStatsDetailed();
+      };
 
-row.querySelector(".btn-neutral").onclick = () => {
-  tip.color = "neutral";
-  updateTipRowBackground(tip, row);
+      row.querySelector(".btn-neutral").onclick = () => {
+        tip.color = "neutral"; // Rückgabe
+        updateTipRowBackground(tip, row);
 
-  updateProfit();
-  updateTotal();
-  updateDayTotal();
-  updateCountryUI();
-  updateStats();
-  updateExtraStats();
-  updateCountryStats();
-  updateCountryStats();
-  updateCountryStatsDetailed();
-};
+        document.getElementById(`header-check-${ei}`).textContent =
+          isEntryComplete(entry) ? "✔️" : "";
 
-row.querySelector(".btn-reset").onclick = () => {
-  tip.color = "reset";
-  updateTipRowBackground(tip, row);
+        updateProfit();
+        updateTotal();
+        updateDayTotal();
+        updateCountryUI();
+        updateStats();
+        updateExtraStats();
+        updateCountryStats();
+        updateCountryStatsDetailed();
+      };
 
-  profitDisplay.textContent = "";
+      row.querySelector(".btn-reset").onclick = () => {
+        tip.color = "reset";
+        updateTipRowBackground(tip, row);
 
-  updateTotal();
-  updateDayTotal();
-  updateCountryUI();
-  updateStats();
-  updateExtraStats();
-  updateCountryStats();
-  updateCountryStats();
-  updateCountryStatsDetailed();
-};
+        profitDisplay.textContent = "";
+
+        document.getElementById(`header-check-${ei}`).textContent =
+          isEntryComplete(entry) ? "✔️" : "";
+
+        updateTotal();
+        updateDayTotal();
+        updateCountryUI();
+        updateStats();
+        updateExtraStats();
+        updateCountryStats();
+        updateCountryStatsDetailed();
+      };
+
+      if (!tip.color) tip.color = "reset";
+
+      updateProfit();
+      content.appendChild(row);
+    }); // schließt entry.tips.forEach
+
+    updateTotal();
+    output.appendChild(div);
+  }); // schließt currentEntries.forEach
+
+  bindDeleteButtons();
+} // schließt renderEntries()
 
 
-// ⭐ Falls keine Farbe gesetzt ist → reset
-if (!tip.color) tip.color = "reset";
-
-updateProfit();
-content.appendChild(row);
-});   // ← schließt entry.tips.forEach
-
-updateTotal();
-output.appendChild(div);
-});   // ← schließt entries.forEach
-
-// ⭐ Buttons aktivieren
-bindDeleteButtons();
-}     // ← schließt renderEntries() oder loadSelectedDay()
 
 
 // ⭐ Länderblock-Farben aktualisieren
@@ -2432,54 +2492,43 @@ function detectSlipType(rawText) {
   const text = rawText.replace(/\r/g, "");
   const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
   const lower = text.toLowerCase();
+  const firstLine = lines[0];
 
   // -------------------------
   // BET365
   // -------------------------
-  if (
-    lower.includes("einsatz") &&
-    lower.includes("gesamtgewinn") &&
-    lines.some(l => /^\d+([.,]\d+)?$/.test(l)) &&
-    !lines[0].match(/vs|@| v /i)
-  ) {
+  if (/^.{0,3}\s*live[\-\–\—]?\s*benachrichtigungen/i.test(firstLine)) {
     return { bookmaker: "bet365" };
   }
 
   // -------------------------
   // 22BET
   // -------------------------
-  if (
-    /wettschein-nr/i.test(text) &&
-    /\d+\.\s/.test(text) &&
-    lower.includes("gesamtquote")
-  ) {
+  if (/wetts?chein[\s\-:;.]*n[\s\-:;.]*[rnpaкя]/i.test(text)) {
     return { bookmaker: "22bet" };
   }
+
 
   // -------------------------
   // NEO.BET
   // -------------------------
-  if (
-    /offen|abgeschlossen/i.test(text) &&
-    /(@|vs| v )/i.test(text) &&
-    /€\s*\d/.test(text)
-  ) {
+  if (/id\s*#?\s*\d+/i.test(text)) {
     return { bookmaker: "neobet" };
   }
 
   // -------------------------
   // BETISTA
   // -------------------------
-  // Hier fügen wir später die echten Erkennungsmerkmale ein
-  if (lower.includes("betista")) {
+  if (/^\s{0,3}[\-\–\—ー]{1,}\s*/.test(firstLine)) {
     return { bookmaker: "betista" };
   }
 
-// -------------------------
-// GENERIC FALLBACK
-// -------------------------
+  // -------------------------
+  // GENERIC FALLBACK
+  // -------------------------
   return { bookmaker: "generic" };
 }
+
 
 // -------------------------
 // Dispatcher für die verschiedenen Parser
@@ -2532,151 +2581,179 @@ function extractTeamName(line) {
 
 function parse22bet(text) {
   const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+  const fullText = lines.join(" ").toLowerCase();
 
-  // Alle Zeilen, die wie Tippblöcke aussehen: "12345."
-  const blockLines = lines.filter(l => /^\d+\.\s/.test(l));
-
-  // Wenn es MEHR ALS EINEN Block gibt → Kombiwette
-  if (blockLines.length > 1) {
+  // Kombi-Schein
+  if (/akkumulator/i.test(text)) {
     return parse22betCombo(text);
   }
 
-  // Wenn es nur EINEN Block gibt, aber NICHT der erste Tippblock ist → Single
-  if (blockLines.length === 1) {
-    const idx = lines.indexOf(blockLines[0]);
-
-    // Wenn der Block NICHT direkt nach der Wettschein-Nr kommt → Single
-    if (idx > 2) {
-      return parse22betSingle(text);
-    }
+  // Single-Schein
+  if (/einzelwette/i.test(text)) {
+    return parse22betSingle(text);
   }
 
-  // Standard: Single
+  // Fallback
   return parse22betSingle(text);
 }
 
-
-
-// Single-Wette erkennen und parsen
 // -------------------------
+// SINGLE-WETTE
+// -------------------------
+
 function parse22betSingle(text) {
   const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
 
   let team1 = "";
   let team2 = "";
-  let marketLines = [];
   let odds = null;
 
-  let inMarket = false;
+  // ============================
+  // TEAM-ERKENNUNG (NEU)
+  // ============================
 
-  for (let i = 0; i < lines.length; i++) {
+  function isTeamLine(line) {
+    if (!line) return false;
+
+    // NICHT Wettschein
+    if (/^wettschein/i.test(line)) return false;
+
+    // NICHT Blocknummer
+    if (/^\d+\./.test(line)) return false;
+
+    // NICHT Quote
+    if (/^\d+([.,]\d+)?$/.test(line)) return false;
+
+    // NICHT Einsatz/Gewinn
+    if (/eur/i.test(line)) return false;
+
+    // NICHT Markt (Großbuchstaben)
+    if (/^[^a-zäöüß]*[A-ZÄÖÜ][^a-zäöüß]*$/.test(line)) return false;
+
+    // Teamzeilen enthalten IMMER Kleinbuchstaben
+    return /[a-zäöüß]/.test(line);
+  }
+
+  let i = 0;
+
+  // Team 1 finden
+  for (; i < lines.length; i++) {
+    if (isTeamLine(lines[i])) {
+      team1 = extractTeamName(lines[i]);
+      i++;
+      break;
+    }
+  }
+
+  // Team 2 finden (kann mehrere Zeilen haben)
+  let team2Parts = [];
+
+  for (; i < lines.length; i++) {
     const line = lines[i];
 
-   // ============================
-// TEAMERKENNUNG
-// ============================
+    // Markt beginnt → Stop
+    if (/^[^a-zäöüß]*[A-ZÄÖÜ][^a-zäöüß]*$/.test(line)) break;
 
-// Team 1 erkennen
-if (
-  !team1 &&
-  /[A-ZÄÖÜ]/.test(line) &&                     // enthält Großbuchstaben
-  !/^wettschein/i.test(line) &&                // NICHT "WETTSCHEIN-NR"
-  !/^\d+\./.test(line) &&                      // NICHT "12345."
-  !/basketball|nba|football|soccer|tennis|hockey/i.test(line) && // keine Sportart
-  !/gesamtquote|wetteinsatz|möglicher gewinn|einzelwette/i.test(line)
-) {
-  team1 = extractTeamName(line);
-  continue;
-}
+    // Quote/EUR → Stop
+    if (/^\d+([.,]\d+)?$/.test(line)) break;
+    if (/eur/i.test(line)) break;
 
-// Team 2 erkennen
-if (
-  team1 &&                                     // Team 1 MUSS existieren
-  !team2 &&
-  /[A-ZÄÖÜ]/.test(line) &&
-  !/^wettschein/i.test(line) &&
-  !/^\d+\./.test(line) &&
-  !/basketball|nba|football|soccer|tennis|hockey/i.test(line) &&
-  !/gesamtquote|wetteinsatz|möglicher gewinn|einzelwette/i.test(line)
-) {
-  team2 = extractTeamName(line);
-  continue;
-}
-
-
-
-// Markt beginnt – erweitert für Spezialmärkte
-if (
-  !inMarket &&
-  /handicap|über|unter|gesamt\s|1x2|treffen|ergebnis|minute|tor|bis|chance|ja|nein/i.test(line)
-) {
-  inMarket = true;
-  marketLines.push(line);
-  continue;
-}
-
-// Markt endet bei Meta-Zeilen (WICHTIG: Stop-Wörter prüfen, bevor wir pushen!)
-if (inMarket) {
-  // Stop-Wörter → Markt endet
-  if (
-    /^\d+([.,]\d+)?$/.test(line) ||
-    /eur/i.test(line) ||
-    /gesamtquote|wetteinsatz|möglicher gewinn|einzelwette|wettart/i.test(line)
-  ) {
-    inMarket = false;
-    continue;
+    if (isTeamLine(line)) {
+      team2Parts.push(extractTeamName(line));
+    } else {
+      if (team2Parts.length > 0) break;
+    }
   }
 
-  // Wenn die Zeile wie eine Marktzeile aussieht → anhängen
-  if (/tor|minute|bis|ja|nein|handicap|über|unter/i.test(line)) {
-    marketLines.push(line);
-    continue;
+  team2 = team2Parts.join(" ").trim();
+
+  // Team 2 reparieren (OCR-Bereinigung)
+  team2 = team2
+  .replace(/^[^A-Za-z0-9]+/, "")      // führende Sonderzeichen entfernen
+  .replace(/["'()]/g, "")             // Klammern & Quotes entfernen
+  .replace(/\s+/g, " ")               // doppelte Leerzeichen entfernen
+  .trim();
+
+
+  // ============================
+  // MARKT-ERKENNUNG (NEU)
+  // ============================
+
+  function isMarketLine(line) {
+    if (/^wettschein/i.test(line)) return false;
+    if (/^\d+([.,]\d+)?$/.test(line)) return false; // Quote
+    if (/eur/i.test(line)) return false;            // Einsatz/Gewinn
+    if (/[a-zäöüß]/.test(line)) return false;       // Teams & Meta
+    return /^[^a-zäöüß]*[A-ZÄÖÜ][^a-zäöüß]*$/.test(line);
   }
 
-  // Sonst Markt beenden
-  inMarket = false;
-}
+  let marketLines = [];
+  let collectingMarket = false;
 
-
-
-
-
-    // Quote erkennen
-  // Erste Zahl mit Punkt/Komma nach dem Markt ist die Quote
-    if (!odds && /^\d+([.,]\d{2,3})$/.test(line)) {
-    odds = parseFloat(line.replace(",", "."));
-    continue;
+  for (const line of lines) {
+    if (isMarketLine(line)) {
+      collectingMarket = true;
+      marketLines.push(line);
+      continue;
     }
 
+    if (collectingMarket && !isMarketLine(line)) {
+      collectingMarket = false;
+    }
   }
 
-  // Markt zusammenbauen
- let market = marketLines.join(" ").replace(/\s+/g, " ").trim();
-  if (!market) market = "";
+  const market = marketLines.join(" ").trim();
 
-  // Einsatz = erste EUR-Zeile NACH "Einzelwette"
+
+
+  // ============================
+  // QUOTE
+  // ============================
+
+  for (const line of lines) {
+    if (/^\d+([.,]\d{2,3})$/.test(line)) {
+      odds = parseFloat(line.replace(",", "."));
+      break;
+    }
+  }
+
+
+
+  // ============================
+  // EINSATZ
+  // ============================
+
   let einsatz = null;
 
   for (let i = 0; i < lines.length; i++) {
     if (/einzelwette/i.test(lines[i])) {
-    // nächste Zeile mit EUR ist der Einsatz
-    for (let j = i + 1; j < lines.length; j++) {
-      if (/eur/i.test(lines[j])) {
-        einsatz = parseFloat(lines[j].replace(/[^\d.,]/g, "").replace(",", "."));
-        break;
+      for (let j = i + 1; j < lines.length; j++) {
+        if (/eur/i.test(lines[j])) {
+          einsatz = parseFloat(lines[j].replace(/[^\d.,]/g, "").replace(",", "."));
+          break;
+        }
       }
-    }
-    break;
+      break;
     }
   }
 
 
-  // Gewinn
+
+  // ============================
+  // GEWINN
+  // ============================
+
   const eurLines = lines.filter(l => /eur/i.test(l));
   const gewinn =
     eurLines.length > 1
       ? parseFloat(eurLines[1].replace(/[^\d.,]/g, "").replace(",", "."))
       : null;
+
+
+
+  // ============================
+  // RETURN
+  // ============================
 
   return {
     bookmaker: "22bet",
@@ -2686,7 +2763,7 @@ if (inMarket) {
         match: `${team1} 🆚 ${team2}`,
         team1,
         team2,
-        market: market || "",
+        market,
         odds,
         stake: einsatz
       }
@@ -2698,80 +2775,151 @@ if (inMarket) {
 }
 
 
-
-
-
-// Kombi-Wette erkennen und parsen
 // -------------------------
+// KOMBI-WETTE (mit Fixes)
+// -------------------------
+
 function parse22betCombo(text) {
   const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
 
   const bets = [];
   let current = null;
+  let stage = "idle"; // idle → team1 → team2 → market → odds
+
+  function startsNewBlock(line) {
+    // Event-ID: 5–6 Ziffern + Punkt, egal wo
+    return /\b\d{5,6}\./.test(line);
+  }
+
+  function isOddsLine(line) {
+    return /^\d+([.,]\d+)?$/.test(line);
+  }
+
+  function isMetaLine(line) {
+    if (!line) return true;
+    if (/eur/i.test(line)) return true;
+    if (/gesamtquote/i.test(line)) return true;
+    if (/wettart/i.test(line)) return true;
+    if (/akkumulator/i.test(line)) return true;
+    return false;
+  }
+
+  // Teamzeilen: alles, was kein Meta, keine Quote, kein Blockstart
+  // und kein klarer Markt ist, aber Buchstaben enthält
+  function isTeamLine(line) {
+    if (!line) return false;
+    if (isMetaLine(line)) return false;
+    if (isOddsLine(line)) return false;
+    if (startsNewBlock(line)) return false;
+    if (isMarketLine(line)) return false;
+    return /[A-Za-zÄÖÜäöüß]/.test(line);
+  }
+
+  // Markterkennung: wie Single + Fallback über Markt-Keywords
+  function isMarketLine(line) {
+    if (!line) return false;
+    if (isMetaLine(line)) return false;
+    if (isOddsLine(line)) return false;
+    if (startsNewBlock(line)) return false;
+
+    // keine Kleinbuchstaben im "sauberen" Markt
+    if (!/[a-zäöüß]/.test(line) &&
+        /^[^a-zäöüß]*[A-ZÄÖÜ][^a-zäöüß]*$/.test(line)) {
+      return true;
+    }
+
+    // Fallback: typische Markt-Keywords
+    if (/GESAMTZAHL|ERGEBNIS|TEAM QUALIFIZIERT|BEIDE TEAMS|TREFFEN|HALBZEIT|ENDSTAND|1X2|HANDICAP|SPIELER\./i.test(line)) {
+      return true;
+    }
+
+    return false;
+  }
 
   for (const line of lines) {
-    // Blockstart: "12345."
-    if (/^\d+\.\s/.test(line)) {
-      if (current) bets.push(current);
+    // NEUER BLOCK
+    if (startsNewBlock(line)) {
+      if (current) {
+        current.market = (current.marketLines || []).join(" ").replace(/\s+/g, " ").trim();
+        bets.push(current);
+      }
 
       current = {
-        match: "",
         team1: "",
         team2: "",
+        marketLines: [],
         market: "",
-        odds: null
+        odds: null,
+        match: ""
       };
+
+      stage = "team1";
       continue;
     }
 
     if (!current) continue;
 
-    // Team 1
-    if (!current.team1 && /^[A-Za-z0-9].+/.test(line) && !line.includes("*")) {
-      current.team1 = line;
+    // TEAM 1
+    if (stage === "team1" && isTeamLine(line)) {
+      current.team1 = extractTeamName(line);
+      stage = "team2";
       continue;
     }
 
-    // Team 2 (mit *)
-    if (!current.team2 && line.startsWith("*")) {
-      current.team2 = line.replace("*", "").trim();
+    // TEAM 2 (kann mehrzeilig sein)
+    if (stage === "team2" && isTeamLine(line)) {
+      let t2 = extractTeamName(line)
+        .replace(/^[^A-Za-z0-9]+/, "")
+        .replace(/["'()]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (current.team2) {
+        current.team2 += " " + t2;
+      } else {
+        current.team2 = t2;
+      }
       continue;
     }
 
-    // Markt
-    if (!current.market && /-|über|unter|1x2|handicap|gesamt/i.test(line)) {
-      current.market = line;
+    // MARKT (mehrzeilig)
+    if ((stage === "team2" || stage === "market") && isMarketLine(line)) {
+      stage = "market";
+      current.marketLines.push(line);
       continue;
     }
 
-    // Quote
-    if (!current.odds && /^\d+([.,]\d+)?$/.test(line)) {
+    // QUOTE
+    if ((stage === "market" || stage === "odds") && isOddsLine(line)) {
       current.odds = parseFloat(line.replace(",", "."));
+      stage = "odds";
       continue;
     }
   }
 
-  // letzten Block speichern
-  if (current) bets.push(current);
+  // letzten Block pushen
+  if (current) {
+    current.market = (current.marketLines || []).join(" ").replace(/\s+/g, " ").trim();
+    bets.push(current);
+  }
 
-  // Einsatz & Gewinn
+  // Einsatz
   const einsatz = parseFloat(
     (lines.find(l => /eur/i.test(l)) || "").replace(/[^\d.,]/g, "").replace(",", ".")
   );
 
-  const gewinn = parseFloat(
-    (lines.find(l => /eur/i.test(l) && !l.includes("Einsatz")) || "").replace(/[^\d.,]/g, "").replace(",", ".")
-  );
+  // Gewinn
+  const eurLines = lines.filter(l => /eur/i.test(l));
+  const gewinn =
+    eurLines.length > 1
+      ? parseFloat(eurLines[1].replace(/[^\d.,]/g, "").replace(",", "."))
+      : null;
 
   // Gesamtquote
-  const totalOdds = parseFloat(
-    (lines.find(l => /^\d+([.,]\d+)?$/.test(l) && !bets.some(b => b.odds === parseFloat(l.replace(",", ".")))) || "")
-      .replace(",", ".")
-  );
+  const totalOdds = bets.reduce((acc, b) => acc * (b.odds || 1), 1);
 
-  // Match-Felder erzeugen
   bets.forEach(b => {
-    b.match = `${b.team1} 🆚 ${b.team2}`;
+    b.match = `${b.team1} 🆚 ${b.team2}`.trim();
   });
 
   return {
@@ -2783,6 +2931,7 @@ function parse22betCombo(text) {
     possibleWin: gewinn || null
   };
 }
+
 
 
 
