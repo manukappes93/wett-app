@@ -346,6 +346,14 @@ select {
   justify-content: center;
 }
 
+.bookmaker-logo {
+  height: 18px;
+  width: auto;
+  margin-right: 6px;
+  opacity: 0.85;
+  vertical-align: middle;
+}
+
   </style>
 </head>
 
@@ -554,6 +562,14 @@ let showZusatztipps = true;
 let days = {};
 
 
+const bookmakerLogos = {
+  "22bet": "img/bookmakers/22bet.png",
+  "bet365": "img/bookmakers/bet365.png",
+  "neobet": "img/bookmakers/neobet.png",
+  "betista": "img/bookmakers/betista.png",
+  "generic": "img/bookmakers/generic.png"
+};
+
 
 const output = document.getElementById("output");
 const baseStakeInput = document.getElementById("baseStake");
@@ -578,7 +594,7 @@ baseStakeInput.oninput = async () => {
   await rtdb.ref("settings/baseStake").set(baseStakeInput.value);
    // WICHTIG: Nur rendern, wenn NICHT gerade eine Uhrzeit eingegeben wird
   if (!isTimePickerOpen) {
-    renderEntries();
+    refreshUI();
     }
   updateDayTotal()
 };
@@ -1002,6 +1018,8 @@ document.getElementById("btnTipsterImport").onclick = async () => {
 
   const parsed = parseBetInput(raw);
 
+  const bookmaker = parsed.bookmaker || "generic";
+
 /* ============================
    PARSER NORMALISIEREN
 ============================ */
@@ -1070,7 +1088,7 @@ const entry = {
   country: "Zusatztipp",
   match: matchName,
   time: "",
-
+  bookmaker: parsed.bookmaker || "generic",
   tips:
     parsed.type === "single"
       ? [
@@ -1121,9 +1139,7 @@ const entry = {
   });
 
   // UI aktualisieren
-  renderEntries();
-  updateDayTotal();
-  updateCountryUI();
+  refreshUI();
   updateStats();
   updateExtraStats();
   updateCountryStats();
@@ -1191,6 +1207,13 @@ function isEntryComplete(entry) {
 }
 
 
+function refreshUI() {
+  renderEntries();
+  updateAmpeln();
+  updateDayTotal();
+  updateCountryUI();
+}
+
 
 /* ============================
    EINTRÄGE RENDERN
@@ -1238,6 +1261,17 @@ function renderEntries() {
       <span class="header-check" id="header-check-${ei}"></span>
       <span class="toggle-arrow">▲</span>
     `;
+
+    // ⭐ Bookmaker-Logo einfügen (nach Tippster/Land, vor Spielpaarung)
+      const logo = document.createElement("img");
+      logo.className = "bookmaker-logo";
+      logo.src = bookmakerLogos[entry.bookmaker] || bookmakerLogos.generic;
+
+    // Country-Span finden
+      const countrySpan = header.querySelector(".header-country");
+
+    // Logo direkt nach dem Country-Span einfügen
+      countrySpan.insertAdjacentElement("afterend", logo);
 
     /* ⭐⭐ HIER KOMMT DER KOMBI-HEADER HIN ⭐⭐ */
     if (entry.country === "Zusatztipp") {
@@ -1309,7 +1343,7 @@ function renderEntries() {
       if (timeInput.value?.length === 5) entry.time = timeInput.value;
       isTimePickerOpen = false;
       sortEntries();
-      renderEntries();
+      refreshUI();
     });
 
     timeWrapper.appendChild(timeInput);
@@ -1362,7 +1396,7 @@ function renderEntries() {
       const newCountry = prompt("Neues Land:", entry.country);
       if (newCountry?.trim()) {
         entry.country = normalizeCountry(newCountry);
-        renderEntries();
+        refreshUI();
       }
     };
 
@@ -1394,7 +1428,7 @@ function renderEntries() {
       delBtn.onclick = () => {
         if (!confirm("Willst du diesen Zusatztipp wirklich löschen?")) return;
         currentEntries.splice(ei, 1);
-        renderEntries();
+        refreshUI();
       };
     }
 
@@ -2044,7 +2078,7 @@ if (bothTeams) tips.push({ label: "Beide Teams treffen", value: "Ja", quote: "",
     currentEntries.push({ country, match, tips, time: "" });
   });
 
-  renderEntries();
+  refreshUI();
   document.getElementById("textInput").value = "";
 };
 
@@ -2209,7 +2243,7 @@ globalCountryStats = await calculateGlobalCountryStats();
       countryStatsDetailed = await calculateGlobalCountryStats();
 
       // ⭐ Einträge rendern
-      renderEntries();
+      refreshUI();
 
       // ⭐ Ampeln aktualisieren
       updateAmpeln();
@@ -2366,7 +2400,7 @@ countryStatsDetailed = stats;
 }
 
 function updateAmpeln() {
-  document.querySelectorAll(".tip-row").forEach((row, index) => {
+  document.querySelectorAll(".tip-row").forEach((row) => {
     const entryIndex = parseInt(row.dataset.entryIndex);
     const tipIndex = parseInt(row.dataset.tipIndex);
     if (isNaN(tipIndex)) return;
@@ -2374,8 +2408,13 @@ function updateAmpeln() {
     const entry = currentEntries[entryIndex];
     const tip = entry.tips[tipIndex];
 
-        // ❗ Zusatztipps bekommen keine Ampelfarbe
     if (entry.country === "Zusatztipp") return;
+
+    // ❗ Wenn Ampel bereits gesetzt wurde → NICHT überschreiben
+    if (tip.ampelColor && tip.ampelColor !== "#ccc") {
+      row.querySelector(".tip-ampel").style.background = tip.ampelColor;
+      return;
+    }
 
     const tipType = getTipType(tip);
     const country = normalizeCountry(entry.country);
@@ -2388,10 +2427,11 @@ function updateAmpeln() {
       else if (profit < 0) color = "#F44336";
     }
 
-    const ampel = row.querySelector(".tip-ampel");
-    if (ampel) ampel.style.background = color;
+    tip.ampelColor = color;
+    row.querySelector(".tip-ampel").style.background = color;
   });
 }
+
 
 /* ============================
    ZUSATZTIPP LÖSCHEN
@@ -2417,9 +2457,7 @@ async function deleteExtraTip(entry, index) {
   }
 
   // 3. UI aktualisieren
-  renderEntries();
-  updateDayTotal();
-  updateCountryUI();
+  refreshUI();
   updateStats();
   updateExtraStats();
   updateCountryStats();
@@ -2451,7 +2489,7 @@ document.getElementById("saveTippster").onclick = () => {
   editingExtraTipId = null;
 
   document.getElementById("editTippsterOverlay").style.display = "none";
-  renderEntries();
+  refreshUI();
 };
 
 /* ============================
@@ -2471,13 +2509,13 @@ document.getElementById("cancelTippsterEdit").onclick = () => {
 // ⭐ Checkbox: Ländertipps anzeigen/ausblenden
 document.getElementById("chkShowLaender").onchange = (e) => {
   showLaendertipps = e.target.checked;
-  renderEntries();
+  refreshUI();
 };
 
 // ⭐ Checkbox: Zusatztipps anzeigen/ausblenden
 document.getElementById("chkShowZusatztipps").onchange = (e) => {
   showZusatztipps = e.target.checked;
-  renderEntries();
+  refreshUI();
 };
 
 /* ============================
@@ -3312,9 +3350,7 @@ function bindDeleteButtons() {
       }
 
       // 3. UI aktualisieren
-      renderEntries();
-      updateDayTotal();
-      updateCountryUI();
+      refreshUI();
       updateStats();
       updateExtraStats();
       updateCountryStats();
