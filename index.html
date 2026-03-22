@@ -1188,23 +1188,47 @@ function getHeaderStatus(entry) {
   return "Beendet";
 }
 
- // Check, ob alle Tipps eines Länderblocks ausgewertet sind (für grünen Haken im Header)
+
 function isEntryComplete(entry) {
-  // Zusatztipp → blockProfit entscheidet
+
   if (entry.country === "Zusatztipp") {
-  // Fertig nur, wenn mindestens ein Tipp NICHT "reset" ist
-  return entry.tips?.some(t => t.color && t.color !== "reset");
+    const extra = entry.extra || {};
+    const bets = Array.isArray(extra.bets) ? extra.bets : [];
+    const isKombi = ["kombi", "combo", "accumulator"].includes(extra.type);
+
+    if (isKombi) {
+      const allBetsDone =
+        bets.length > 0 &&
+        bets.every(b =>
+          b.color &&
+          b.color !== "reset" &&
+          (b.color === "correct" || b.color === "wrong" || b.color === "neutral")
+        );
+
+      const hasOdds =
+        extra.quoteGesamt &&
+        !isNaN(parseFloat(extra.quoteGesamt));
+
+      const hasStake =
+        extra.einsatz &&
+        !isNaN(parseFloat(extra.einsatz));
+
+      return allBetsDone && hasOdds && hasStake;
+    }
+
+    return entry.tips?.some(t => t.color && t.color !== "reset");
   }
 
-
-  // Normale Tipps
   if (!entry.tips || entry.tips.length === 0) return false;
 
- return entry.tips.every(tip =>
-  tip.quote && tip.quote.trim() !== "" &&
-  (tip.color === "correct" || tip.color === "wrong" || tip.color === "neutral")
+  return entry.tips.every(tip =>
+    tip.quote && tip.quote.trim() !== "" &&
+    (tip.color === "correct" || tip.color === "wrong" || tip.color === "neutral")
   );
 }
+
+
+
 
 
 function refreshUI() {
@@ -1497,11 +1521,25 @@ if (entry.country === "Zusatztipp") {
 
     content.appendChild(row);
 
+    // Quote speichern
+    row.querySelector(".quote-input").addEventListener("input", e => {
+      extra.quoteGesamt = e.target.value.trim();
+      refreshUI();
+    });
+
+    // Einsatz speichern
+    row.querySelector(".einsatz-input").addEventListener("input", e => {
+      extra.einsatz = e.target.value.trim();
+      refreshUI();
+    });
+
     function applyTipColor(div2, color) {
       if (color === "correct") div2.style.background = "#d4f8d4";
       else if (color === "wrong") div2.style.background = "#ffd4d4";
-      else div2.style.background = "#f7f7f7";
+      else if (color === "neutral") div2.style.background = "#f7f7f7";
+      else div2.style.background = "#ffffff"; // RESET
     }
+
 
     function applyKombiColor() {
       row.classList.remove("tip-correct", "tip-wrong", "tip-neutral");
@@ -1533,6 +1571,7 @@ if (entry.country === "Zusatztipp") {
           <button class="btn-sub-correct" data-bi="${bi}">✔️</button>
           <button class="btn-sub-wrong" data-bi="${bi}">❌</button>
           <button class="btn-sub-neutral" data-bi="${bi}">➖</button>
+          <button class="btn-sub-reset" data-bi="${bi}">🔄</button>
         </div>
       `;
 
@@ -1541,15 +1580,38 @@ if (entry.country === "Zusatztipp") {
     });
 
     function updateKombiStatus() {
+      const allReset = bets.every(b => b.color === "reset");
       const allCorrect = bets.every(b => b.color === "correct");
       const anyWrong = bets.some(b => b.color === "wrong");
 
+      if (allReset) {
+        // ⭐ KOMBI KOMPLETT ZURÜCKSETZEN
+        entry.color = "reset";
+
+        // UI-Klassen entfernen
+        row.classList.remove("tip-correct", "tip-wrong", "tip-neutral");
+
+        // Profit zurücksetzen
+        entry.blockProfit = 0;
+        totalBox.textContent = "0.00 €";
+        totalBox.style.backgroundColor = "#ddd";
+
+        // Header-Haken entfernen
+        const check = document.querySelector(`#header-check-${ei}`);
+        if (check) check.textContent = "";
+
+        return; // WICHTIG: Rest nicht mehr ausführen
+      }
+
+      // ⭐ Normale Kombi-Status-Logik
       if (anyWrong) entry.color = "wrong";
       else if (allCorrect) entry.color = "correct";
       else entry.color = "neutral";
 
       applyKombiColor();
     }
+
+
 
     function updateExtraTotalKombi() {
       const einsatz = parseFloat(extra.einsatz || 0);
@@ -1575,6 +1637,7 @@ if (entry.country === "Zusatztipp") {
         updateExtraTotalKombi();
         updateDayTotal();
         updateStats();
+        refreshUI();
       };
     });
 
@@ -1587,6 +1650,7 @@ if (entry.country === "Zusatztipp") {
         updateExtraTotalKombi();
         updateDayTotal();
         updateStats();
+        refreshUI();
       };
     });
 
@@ -1599,8 +1663,51 @@ if (entry.country === "Zusatztipp") {
         updateExtraTotalKombi();
         updateDayTotal();
         updateStats();
+        refreshUI();
       };
     });
+
+content.querySelectorAll(".btn-sub-reset").forEach(btn => {
+  btn.onclick = () => {
+    const bi = btn.dataset.bi;
+
+    // 1) Einzelnen Tipp zurücksetzen
+    bets[bi].color = "reset";
+
+    // 3) UI zurücksetzen
+    applyTipColor(btn.closest(".extra-tip-line"), "reset");
+
+    // 4) Prüfen, ob ALLE Tipps reset sind
+    const allReset = bets.every(b => b.color === "reset");
+
+    if (allReset) {
+      // ⭐ KOMBI KOMPLETT ZURÜCKSETZEN
+      entry.color = "reset";
+
+      // UI-Klassen entfernen
+      row.classList.remove("tip-correct", "tip-wrong", "tip-neutral");
+
+      // Profit zurücksetzen
+      entry.blockProfit = 0;
+      totalBox.textContent = "0.00 €";
+      totalBox.style.backgroundColor = "#ddd";
+
+    } else {
+      // ⭐ Normaler Kombi-Status
+      updateKombiStatus();
+    }
+
+    // 5) Profit neu berechnen
+    updateExtraTotalKombi();
+
+    // 6) Tagesstatistik aktualisieren
+    updateDayTotal();
+    updateStats();
+    refreshUI();
+  };
+});
+
+
 
     updateKombiStatus();
     updateExtraTotalKombi();
@@ -1683,9 +1790,6 @@ if (entry.country === "Zusatztipp") {
   row.querySelector(".btn-correct").onclick = () => {
     entry.tips.forEach((t, idx) => {
       t.color = "correct";
-      rtdb
-        .ref(`days/${loadedDay}/entries/${ei}/tips/${idx}/color`)
-        .set("correct");
     });
 
     row.classList.remove("tip-wrong", "tip-neutral");
@@ -1699,14 +1803,12 @@ if (entry.country === "Zusatztipp") {
     updateCountryStats();
     updateCountryStatsDetailed();
     updateAmpeln();
+    refreshUI();
   };
 
   row.querySelector(".btn-wrong").onclick = () => {
     entry.tips.forEach((t, idx) => {
       t.color = "wrong";
-      rtdb
-        .ref(`days/${loadedDay}/entries/${ei}/tips/${idx}/color`)
-        .set("wrong");
     });
 
     row.classList.remove("tip-correct", "tip-neutral");
@@ -1720,14 +1822,12 @@ if (entry.country === "Zusatztipp") {
     updateCountryStats();
     updateCountryStatsDetailed();
     updateAmpeln();
+    refreshUI();
   };
 
   row.querySelector(".btn-neutral").onclick = () => {
     entry.tips.forEach((t, idx) => {
       t.color = "neutral";
-      rtdb
-        .ref(`days/${loadedDay}/entries/${ei}/tips/${idx}/color`)
-        .set("neutral");
     });
 
     row.classList.remove("tip-correct", "tip-wrong");
@@ -1743,14 +1843,12 @@ if (entry.country === "Zusatztipp") {
     updateCountryStats();
     updateCountryStatsDetailed();
     updateAmpeln();
+    refreshUI();
   };
 
   row.querySelector(".btn-reset").onclick = () => {
     entry.tips.forEach((t, idx) => {
       t.color = "reset";
-      rtdb
-        .ref(`days/${loadedDay}/entries/${ei}/tips/${idx}/color`)
-        .set("reset");
     });
 
     row.classList.remove("tip-correct", "tip-wrong", "tip-neutral");
