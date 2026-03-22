@@ -1275,16 +1275,27 @@ function renderEntries() {
 
     /* ⭐⭐ HIER KOMMT DER KOMBI-HEADER HIN ⭐⭐ */
     if (entry.country === "Zusatztipp") {
-   const extra = entry.extra || {};
-   const isKombi = ["kombi", "combo", "accumulator"].includes(extra.type);
-   const bets = Array.isArray(extra.bets) ? extra.bets : [];
+      const extra = entry.extra || {};
+      const isKombi = ["kombi", "combo", "accumulator"].includes(extra.type);
+      const bets = Array.isArray(extra.bets) ? extra.bets : [];
 
-    if (isKombi) {
-    const matchSpan = header.querySelector(".header-match");
-    matchSpan.textContent = `Kombi-Wette – ${bets.length} Tipp${bets.length > 1 ? "s" : ""}`;
+      if (isKombi && bets.length) {
+        const matchSpan = header.querySelector(".header-match");
+        const matches = bets
+          .map(b => b.match || "")
+          .filter(m => m.trim().length > 0);
+
+        // Standard: erste zwei Paarungen untereinander
+        if (matches.length) {
+          matchSpan.innerHTML = matches.slice(0, 2).join("<br>");
+        } else {
+          // Fallback, falls keine match-Texte vorhanden
+          matchSpan.textContent = `Kombi-Wette – ${bets.length} Tipp${bets.length > 1 ? "s" : ""}`;
+        }
+      }
     }
-    }
-/* ⭐⭐ KOMBI-HEADER ENDE ⭐⭐ */
+    /* ⭐⭐ KOMBI-HEADER ENDE ⭐⭐ */
+
 
     /* ⭐ Haken setzen */
     header.querySelector(".header-check").textContent =
@@ -2599,257 +2610,237 @@ function parseBetInput(text) {
 // -------------------------
 
 // -------------------------
-// FINALER BET365-PARSER
+// Parser BET365
 // -------------------------
 
 function parseBet365(text) {
-  //
-  // 1) ROBUSTER ZEILENSPLIT
-  //
+
+  // 0) Unicode Cleanup (Zero-width, RTL, BOM usw.)
+  function cleanUnicode(str) {
+    return str.replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/g, "");
+  }
+
+  // 1) Zeilen splitten
   const rawLines = text
     .replace(/\r/g, "\n")
-    .replace(/\u2028/g, "\n")
-    .replace(/\u2029/g, "\n")
-    .replace(/\u000B/g, "\n")
-    .replace(/\u000C/g, "\n")
-    .replace(/\u0085/g, "\n")
+    .replace(/\u2028|\u2029|\u000B|\u000C|\u0085/g, "\n")
     .replace(/\n+/g, "\n")
     .split("\n");
 
-  //
-  // 2) NORMALISIERTE ZEILEN
-  //
+console.log(JSON.stringify(rawLines, null, 2));
+
+  // 2) Normalisierung EINMAL
+  function fixOCR(line) {
+    return line
+      .replace(/handlcap/i, "handicap")
+      .replace(/ergebnls/i, "ergebnis")
+      .replace(/chanee/i, "chance")
+      .replace(/unler/i, "unter")
+      .replace(/uber/i, "über")
+      .replace(/O(?=\d)/g, "0")
+      .replace(/I(?=\d)/g, "1")
+      .replace(/l(?=\d)/g, "1")
+      .replace(/S(?=\d)/g, "5");
+  }
+
+  function normalize(line) {
+    return cleanUnicode(
+      fixOCR(
+        line
+          .replace(/\u00A0/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+      )
+    );
+  }
+
   const lines = rawLines
-    .map(l => l.trim().replace(/\u00A0/g, " "))
+    .map(l => normalize(l))
     .filter(l => l.length > 0);
 
+  // 3) Regex & Keywords
+  const teamRegex = /\s*(?:vs?\.?|v\.?|gegen|@|–|—|-|:)\s*/i;
+
+  const marketKeywords = [
+    "über", "unter", "over", "under",
+    "handicap", "asian", "punkte", "punktzahl",
+    "doppelte chance", "double chance",
+    "draw no bet", "dnb",
+    "beide teams treffen", "btts",
+    "endergebnis", "ergebnis",
+    "halbzeit", "1. halbzeit", "2. halbzeit",
+    "team erzielt", "team gewinnt",
+    "spiel - ergebnis wird sein",
+    "gesamtzahl", "gesamt", "total",
+    "siegtor", "gewinnt eine halbzeit",
+    "ergebnis &", "score", "correct score",
+    "ht/ft",
+    "spread"
+  ];
+
+  const handicapRegex =
+    /(?:^|\s)([+-]?\d+(?:[.,]\d+)?|[+-]?\d+½|[+-]?\d+\/\d+|[+-]?\d+:\d+)(?=\s|$)/;
+
+  // ⭐ Universeller Betrag-Regex
+  const amountRegex =
+  /[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]*[€\u00A4\u20AC]?\s*([0-9]{1,3}(?:[.,][0-9]{1,2})?)\s*[€\u00A4\u20AC]?/;
+
+
+  // 4) Variablen
   let team1 = null;
   let team2 = null;
 
-  let isConfigurator = false;
-  let selections = [];
-
   let marketMain = null;
   let marketSub = null;
-  let marketDetected = false;
+
+  let isConfigurator = false;
+  let selections = [];
 
   let totalOdds = null;
   let totalStake = null;
   let possibleWin = null;
 
-  const fixNumber = (str) =>
-    str
-      .replace(/O/g, "0")
-      .replace(/o/g, "0")
-      .replace(/I/g, "1")
-      .replace(/l/g, "1")
-      .replace(/S/g, "5");
-
   let expectNumberFor = null;
 
-  function normalize(line) {
-    return line
-      .replace(/\u00A0/g, " ")
-      .replace(/\s+/g, " ")
-      .replace(/ ,/g, ",")
-      .replace(/ \./g, ".")
-      .replace(/\. /g, ".")
-      .trim();
+  // 5) Quote extrahieren
+  function extractOdds(n) {
+    const nums = n.match(/\d+[.,]\d+/g);
+    if (!nums) return null;
+    const parsed = nums.map(x => parseFloat(x.replace(",", ".")));
+    const odds = parsed.filter(x => x >= 1.01 && x <= 100);
+    return odds.length ? odds[0] : null;
   }
 
-  //
-  // 3) Over/Under‑Erkennung
-  //
-  function isOverUnder(line) {
-    const n = normalize(line);
-
+  function isSkipLine(n) {
     return (
-      /mehr\s*als/i.test(n) ||
-      /weniger\s*als/i.test(n) ||
-      /über/i.test(n) ||
-      /unter/i.test(n) ||
-      /over/i.test(n) ||
-      /under/i.test(n) ||
-      (/punkte/i.test(n) && /\d/.test(n))
+      /live[- ]?benach/i.test(n) ||
+      (/ausw/i.test(n) && /wieder/i.test(n)) ||
+      /^gratis/i.test(n) ||
+      /nettogewinne schließen den einsatz/i.test(n)   // ⭐ NEU
     );
   }
 
-  //
-  // 4) Zeilen, die NIEMALS Markt sind
-  //
-  function isNeverMarket(line) {
-    const n = normalize(line);
 
-    return (
-      /super\s*boost/i.test(n) ||
-      /boost/i.test(n) ||
-      /qualifikationsmethode/i.test(n) ||
-      /methode/i.test(n) ||
-      /weitere möglichkeit/i.test(n) ||
-      /wettsteuer/i.test(n) ||
-      /gratis/i.test(n) ||
-      /top[- ]?wetten/i.test(n)
-    );
-  }
-
-  //
-  // 5) Skip‑Zeilen (OCR‑tolerant)
-  //
-  function isSkipLine(raw, norm) {
-    return (
-      /live[- ]?benach/i.test(norm) ||
-      (/ausw/i.test(norm) && /wieder/i.test(norm)) ||
-      /^gratis/i.test(norm)
-    );
-  }
-
-  //
-  // 6) Konfigurator‑Auswahl‑Erkennung (entscheidend!)
-  //
-  function isConfiguratorSelection(line) {
-  const n = normalize(line);
-
-  // harte Ausschlüsse
-  if (/einsatz/i.test(n)) return false;
-  if (/gewinn/i.test(n)) return false;
-  if (/wettsteuer/i.test(n)) return false;
-  if (/gratis/i.test(n)) return false;
-  if (/konfigurator/i.test(n)) return false;
-  if (/live[- ]?benach/i.test(n)) return false;
-  if (/ausw/i.test(n) && /wieder/i.test(n)) return false;
-
-  // SPEZIALFALL: "Spiel - Ergebnis wird sein ..."
-  if (/spiel\s*-\s*ergebnis wird sein/i.test(n)) return true;
-
-  // Kategorien / Überschriften
-  if (/^spiel/i.test(n)) return false;
-  if (/^handicap$/i.test(n)) return false;
-  if (/weitere möglichkeit/i.test(n)) return false;
-  if (/möglichkeit/i.test(n)) return false;
-
-  // echte Selektionen:
-  if (isOverUnder(n)) return true;
-  if (/punkte/i.test(n) && /\d/.test(n)) return true;
-  if (/handicap/i.test(n) && /\d/.test(n)) return true;
-  if (/\d/.test(n) && /[+-]\s*\d/.test(n)) return true;
-
-  return false;
-}
-
-
-  //
   // 7) Parsing Loop
-  //
   for (let i = 0; i < lines.length; i++) {
-    const rawLine = rawLines[i] || "";
-    const line = lines[i];
-    const n = normalize(line);
+    const n = lines[i];
+    const lower = n.toLowerCase();
 
-    // Skip
-    if (isSkipLine(rawLine, n)) continue;
+    // Debug: jede Zeile mit Index ausgeben
+    console.log(i, JSON.stringify(n));
 
-    // NIE Markt
-    if (isNeverMarket(n)) continue;
+    if (isSkipLine(n)) continue;
 
-    // Over/Under Markt
-    if (!isConfigurator && isOverUnder(n)) {
-      marketMain = n;
-      marketDetected = true;
-      continue;
+    // TEAM
+    if (teamRegex.test(n) && !/\d+[.,]\d+/.test(n)) {
+      const parts = n.split(teamRegex).map(p => p.trim()).filter(Boolean);
+      if (parts.length === 2) {
+        team1 = parts[0];
+        team2 = parts[1];
+        continue;
+      }
     }
 
-    // Konfigurator aktivieren
+    // KONFIGURATOR
     if (/konfigurator/i.test(n)) {
       isConfigurator = true;
       continue;
     }
 
-    // Konfigurator‑Selektion
-    if (isConfigurator && isConfiguratorSelection(n)) {
+    if (isConfigurator && marketKeywords.some(k => lower.includes(k))) {
       selections.push(n);
       continue;
     }
 
-    // Teams
-    if (/( v | vs | y | ν | V )/i.test(n)) {
-      const parts = n.split(/ v | vs | y | ν | V /i);
-      if (parts.length === 2) {
-        team1 = parts[0].trim();
-        team2 = parts[1].trim();
-      }
+    // ⭐ DIREKTE HANDICAP-/SPREAD-ZEILE (z. B. "TCU +13.5", "Michigan - 10.5")
+    if (/^[A-Za-z].*\s[+-]\s*\d+(?:[.,]\d+)?$/.test(n)) {
+      marketMain = n;   // z. B. "TCU +13.5"
       continue;
     }
 
-    // Quote
-    if (!/€/.test(n) && !/%/.test(n) && /[\d.,]/.test(n)) {
-      const nums = n
-        .replace(/[^\d.,]/g, " ")
-        .split(" ")
-        .filter(x => /^\d+[.,]?\d*$/.test(x));
 
-      if (nums.length > 0) {
-        const parsed = nums.map(x =>
-          parseFloat(fixNumber(x).replace(",", "."))
-        );
-        const maxNum = Math.max(...parsed);
-        if (!totalOdds || maxNum > totalOdds) totalOdds = maxNum;
+    // HANDICAP (frisst KEINE Geldbeträge mehr)
+    const hMatch = handicapRegex.exec(n);
+    if (
+      hMatch &&
+      !amountRegex.test(n) &&        // verhindert €2,50, €4,02, 5,3% etc.
+      !/%/.test(n) &&                // ⭐ verhindert 5,3% Wettsteuer
+      !/einsatz|gewinn|credit/i.test(n)
+    ) {
+      let hValue = hMatch[1].replace(",", ".").replace("½", ".5");
+      marketMain = n;
+      continue;
+    }
+
+
+
+    // MARKT
+    if (
+      !/einsatz|gewinn|gesamtgewinn|auszahlung|rückzahlung|steuer|wettsteuer/i.test(n) &&
+      marketKeywords.some(k => lower.includes(k))
+    ) {
+      if (/handicap/i.test(n) && !handicapRegex.test(n)) continue;
+      if (!marketMain) marketMain = n;
+      else if (!marketSub) marketSub = n;
+      continue;
+    }
+
+
+
+    // QUOTE – nur wenn wir NICHT gerade einen Betrag erwarten
+    if (!expectNumberFor && !/[€%]/.test(n) && !/einsatz|gewinn|auszahlung|steuer|wettsteuer/i.test(n)) {
+      const odds = extractOdds(n);
+      if (odds) {
+        totalOdds = odds;
         continue;
       }
     }
 
-    // Einsatz
-    if (/einsatz/i.test(n)) {
+
+    // ⭐ EINSATZ
+    if (/^einsatz$/i.test(n) || /^einsatzbetrag$/i.test(n) || /setzen sie/i.test(n)) {
+      console.log(">>> Einsatz-Zeile erkannt:", JSON.stringify(n));
       expectNumberFor = "stake";
       continue;
     }
-    if (expectNumberFor === "stake" && /€?\s*\d+[.,]\d+/.test(n)) {
-      totalStake = parseFloat(
-        fixNumber(n).replace(/[^\d.,]/g, "").replace(",", ".")
-      );
-      expectNumberFor = null;
-      continue;
+
+    if (expectNumberFor === "stake") {
+      console.log(">>> Erwartet Einsatz-Betrag in Zeile:", JSON.stringify(n));
+      const num = n.match(amountRegex);
+      console.log(">>> Match Einsatz:", num);
+      if (num) {
+        totalStake = parseFloat(num[1].replace(",", "."));
+        expectNumberFor = null;
+        continue;
+      }
     }
 
-    // Gewinn
-    if (/gesamtgewinn/i.test(n)) {
+    // ⭐ GEWINN
+    if (/^gesamtgewinn$/i.test(n) || /^gewinn$/i.test(n) || /auszahlung/i.test(n)) {
+      console.log(">>> Gewinn-Zeile erkannt:", JSON.stringify(n));
       expectNumberFor = "win";
       continue;
     }
-    if (expectNumberFor === "win" && /€?\s*\d+[.,]\d+/.test(n)) {
-      possibleWin = parseFloat(
-        fixNumber(n).replace(/[^\d.,]/g, "").replace(",", ".")
-      );
-      expectNumberFor = null;
-      continue;
-    }
 
-    // Normaler Markt (nur wenn kein Over/Under erkannt wurde)
-    if (!marketDetected && !isConfigurator) {
-      if (!marketMain) {
-        marketMain = n;
-        continue;
-      }
-      if (!marketSub) {
-        marketSub = n;
+    if (expectNumberFor === "win") {
+      console.log(">>> Erwartet Gewinn-Betrag in Zeile:", JSON.stringify(n));
+      const num = n.match(amountRegex);
+      console.log(">>> Match Gewinn:", num);
+      if (num) {
+        possibleWin = parseFloat(num[1].replace(",", "."));
+        expectNumberFor = null;
         continue;
       }
     }
+
   }
 
-  //
-  // 8) Finaler Markt
-  //
-  let finalMarket = null;
+  // 8) Markt finalisieren
+  const finalMarket = marketSub
+    ? `${marketMain} | ${marketSub}`
+    : marketMain;
 
-  if (isConfigurator) {
-    finalMarket = selections.join(" & ");
-  } else {
-    finalMarket = marketSub ? `${marketMain} | ${marketSub}` : marketMain;
-  }
-
-  //
-  // 9) Return im 22bet‑Format
-  //
+  // 9) Return
   return {
     bookmaker: "bet365",
     type: "single",
@@ -2863,12 +2854,11 @@ function parseBet365(text) {
         stake: totalStake
       }
     ],
-    totalStake: totalStake,
-    totalOdds: totalOdds,
-    possibleWin: possibleWin
+    totalStake,
+    totalOdds,
+    possibleWin
   };
 }
-
 
 
 
