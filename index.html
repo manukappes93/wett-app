@@ -372,12 +372,12 @@ select {
 
   <label style="margin-left:15px; font-size:16px;">
   <input type="checkbox" id="chkShowLaender" checked>
-  Ländertipps anzeigen
+  Ländertipps
 </label>
 
 <label style="margin-left:15px; font-size:16px;">
   <input type="checkbox" id="chkShowZusatztipps" checked>
-  Zusatztipps anzeigen
+  Zusatztipps
 </label>
 
 <div style="margin-top:20px; margin-bottom:10px;">
@@ -458,21 +458,21 @@ select {
   <div class="overlay-content">
     <h2>Gesamtbilanz nach Ländern</h2>
 
-<div class="search-close-row">
-  <input 
-    type="text" 
-    id="countrySearch" 
-    placeholder="Land suchen..." 
-    class="search-input">
+    <div class="search-close-row">
+      <input 
+        type="text" 
+        id="countrySearch" 
+        placeholder="Land suchen..." 
+        class="search-input">
 
-  <button id="closeCountryStats" class="close-button top-close">Schließen</button>
-</div>
+      <button id="closeCountryStats" class="close-button top-close">Schließen</button>
+    </div>
 
     <div id="countryStatsContent"></div>
 
-    <button id="closeCountryStats" class="close-button">Schließen</button>
   </div>
 </div>
+
 
 <div id="countryInfoOverlay" class="overlay" style="display:none;">
   <div class="overlay-content">
@@ -1438,24 +1438,31 @@ function renderEntries() {
     /* ⭐ Info-Button */
     h2.querySelector(".info-country").onclick = async () => {
       const country = normalizeCountry(entry.country);
+
+      // 1. Stats neu berechnen
       const stats = await calculateGlobalCountryStats();
+
+      // 2. Overlay-Inhalt neu rendern
       renderCountryStats(stats);
 
-      document.getElementById("countryStatsOverlay").style.display = "flex";
+      // 3. Overlay anzeigen
+      const overlay = document.getElementById("countryStatsOverlay");
+      overlay.style.display = "flex";
 
+      // 4. Suchfeld vorausfüllen
       const searchInput = document.getElementById("countrySearch");
       searchInput.value = country.toLowerCase();
       searchInput.focus();
 
-      document
-        .querySelectorAll("#countryStatsContent .country-box")
-        .forEach((box) => {
-          const name = box.querySelector("h3").textContent.toLowerCase();
-          box.style.display = name.includes(country.toLowerCase())
-            ? "block"
-            : "none";
-        });
+      // 5. Trefferliste sofort filtern
+      filterCountryStats(country.toLowerCase());
+
+      // 6. Live-Filter aktivieren (wie beim Gesamtbilanz-Overlay)
+      searchInput.oninput = () => {
+        filterCountryStats(searchInput.value.toLowerCase());
+      };
     };
+
 
     /* ⭐ Delete-Button */
     const delBtn = h2.querySelector(".delete-entry");
@@ -2431,30 +2438,36 @@ document.getElementById("closeStats").onclick = () => {
 };
 
 /* ============================
-   GEsamtBilanz
+   GesamtBilanz
 ============================ */
 document.getElementById("btnCountryStats").onclick = async () => {
   const stats = await calculateGlobalCountryStats();
   console.log("Global Stats:", stats);
   renderCountryStats(stats);
-  const countrySearchInput = document.getElementById("countrySearch");
 
-countrySearchInput.addEventListener("input", function () {
-  const search = this.value.toLowerCase();
+  document.getElementById("countryStatsOverlay").style.display = "flex";
+};
+
+
+function filterCountryStats(search) {
   const boxes = document.querySelectorAll("#countryStatsContent .country-box");
 
   boxes.forEach(box => {
-    const countryName = box.querySelector("h3").textContent.toLowerCase();
-    box.style.display = countryName.includes(search) ? "block" : "none";
+    const name = box.querySelector("h3").textContent.toLowerCase();
+    box.style.display = name.includes(search) ? "block" : "none";
   });
+}
+
+const countrySearchInput = document.getElementById("countrySearch");
+countrySearchInput.addEventListener("input", function () {
+  filterCountryStats(this.value.toLowerCase());
 });
 
-document.getElementById("countryStatsOverlay").style.display = "flex";
-};
 
 document.getElementById("closeCountryStats").onclick = () => {
   document.getElementById("countryStatsOverlay").style.display = "none";
 };
+
 
 
 /* ============================
@@ -2711,234 +2724,172 @@ function parseBetInput(text) {
 // Parser BET365
 // -------------------------
 
+function detectBet365SlipType(text) {
+  const lower = text.toLowerCase();
+
+  // Explizite Kombi-Begriffe
+  if (
+    lower.includes("kombi") ||
+    lower.includes("mehrfach") ||
+    lower.includes("multiple") ||
+    lower.includes("parlay")
+  ) {
+    return "kombi";
+  }
+
+  // Mehrere Auswahlen
+  const selectionCount = (text.match(/@| v | vs /g) || []).length;
+  if (selectionCount > 1) {
+    return "kombi";
+  }
+
+  // Default: Einzelwette
+  return "single";
+}
+
+
 function parseBet365(text) {
+  const slipType = detectBet365SlipType(text);
 
-  // 0) Unicode Cleanup (Zero-width, RTL, BOM usw.)
-  function cleanUnicode(str) {
-    return str.replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/g, "");
+  if (slipType === "kombi") {
+    return parseBet365Kombi(text);
   }
 
-  // 1) Zeilen splitten
-  const rawLines = text
-    .replace(/\r/g, "\n")
-    .replace(/\u2028|\u2029|\u000B|\u000C|\u0085/g, "\n")
-    .replace(/\n+/g, "\n")
-    .split("\n");
+  return parseBet365Single(text);
+}
 
-console.log(JSON.stringify(rawLines, null, 2));
 
-  // 2) Normalisierung EINMAL
-  function fixOCR(line) {
-    return line
-      .replace(/handlcap/i, "handicap")
-      .replace(/ergebnls/i, "ergebnis")
-      .replace(/chanee/i, "chance")
-      .replace(/unler/i, "unter")
-      .replace(/uber/i, "über")
-      .replace(/O(?=\d)/g, "0")
-      .replace(/I(?=\d)/g, "1")
-      .replace(/l(?=\d)/g, "1")
-      .replace(/S(?=\d)/g, "5");
-  }
+// =========================
+// Bet365 Müllzeilen entfernen
+// =========================
+const BET365_TRASH = [
+  "• Live-Benachrichtigungen",
+  "Auswahlen wiederverwenden",
+  "5,3% Wettsteuer",
+  "Gratis",
+  "Nettogewinne schließen den Einsatz von Wett-Credits aus"
+];
 
-  function normalize(line) {
-    return cleanUnicode(
-      fixOCR(
-        line
-          .replace(/\u00A0/g, " ")
-          .replace(/\s+/g, " ")
-          .trim()
-      )
-    );
-  }
-
-  const lines = rawLines
-    .map(l => normalize(l))
+// =========================
+// Bet365 SINGLE PARSER
+// =========================
+function parseBet365Single(text) {
+  // Zeilen vorbereiten
+  let lines = text
+    .split("\n")
+    .map(l => l.trim())
     .filter(l => l.length > 0);
 
-  // 3) Regex & Keywords
-  const teamRegex = /\s*(?:vs?\.?|v\.?|gegen|@|–|—|-|:)\s*/i;
+  // Müll entfernen
+  lines = lines.filter(l => !BET365_TRASH.includes(l));
 
-  const marketKeywords = [
-    "über", "unter", "over", "under",
-    "handicap", "asian", "punkte", "punktzahl",
-    "doppelte chance", "double chance",
-    "draw no bet", "dnb",
-    "beide teams treffen", "btts",
-    "endergebnis", "ergebnis",
-    "halbzeit", "1. halbzeit", "2. halbzeit",
-    "team erzielt", "team gewinnt",
-    "spiel - ergebnis wird sein",
-    "gesamtzahl", "gesamt", "total",
-    "siegtor", "gewinnt eine halbzeit",
-    "ergebnis &", "score", "correct score",
-    "ht/ft",
-    "spread"
-  ];
+  let market = null;
+  let matchLine = null;
+  let odds = null;
+  let stake = null;
+  let possibleWin = null;
 
-  const handicapRegex =
-    /(?:^|\s)([+-]?\d+(?:[.,]\d+)?|[+-]?\d+½|[+-]?\d+\/\d+|[+-]?\d+:\d+)(?=\s|$)/;
+  // =========================
+  // MATCH finden
+  // =========================
+  for (let i = 0; i < lines.length; i++) {
+    if (
+      lines[i].includes("@") ||
+      lines[i].includes(" v ") ||
+      lines[i].includes(" vs ")
+    ) {
+      matchLine = lines[i];
+      break;
+    }
+  }
 
-  // ⭐ Universeller Betrag-Regex
-  const amountRegex =
-  /[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]*[€\u00A4\u20AC]?\s*([0-9]{1,3}(?:[.,][0-9]{1,2})?)\s*[€\u00A4\u20AC]?/;
+  // =========================
+  // MARKET extrahieren (alle Zeilen über dem Match)
+  // =========================
+  if (matchLine) {
+    const matchIndex = lines.indexOf(matchLine);
+    const marketLines = [];
 
+    for (let i = matchIndex - 1; i >= 0; i--) {
+      const l = lines[i];
 
-  // 4) Variablen
+      // Stop-Kriterien
+      if (BET365_TRASH.includes(l)) break;
+      if (l.toLowerCase().includes("einsatz")) break;
+      if (l.toLowerCase().includes("gesamtgewinn")) break;
+      if (l.toLowerCase().includes("wett-credits")) break;
+
+      marketLines.unshift(l);
+    }
+
+    market = marketLines.join(" ").trim();
+  }
+
+  // =========================
+  // TEAMS extrahieren
+  // =========================
   let team1 = null;
   let team2 = null;
 
-  let marketMain = null;
-  let marketSub = null;
+  if (matchLine) {
+    const cleaned = matchLine
+      .replace(" vs ", " v ")
+      .replace(" @ ", " v ");
 
-  let isConfigurator = false;
-  let selections = [];
-
-  let totalOdds = null;
-  let totalStake = null;
-  let possibleWin = null;
-
-  let expectNumberFor = null;
-
-  // 5) Quote extrahieren
-  function extractOdds(n) {
-    const nums = n.match(/\d+[.,]\d+/g);
-    if (!nums) return null;
-    const parsed = nums.map(x => parseFloat(x.replace(",", ".")));
-    const odds = parsed.filter(x => x >= 1.01 && x <= 100);
-    return odds.length ? odds[0] : null;
+    [team1, team2] = cleaned.split(" v ").map(t => t.trim());
   }
 
-  function isSkipLine(n) {
-    return (
-      /live[- ]?benach/i.test(n) ||
-      (/ausw/i.test(n) && /wieder/i.test(n)) ||
-      /^gratis/i.test(n) ||
-      /nettogewinne schließen den einsatz/i.test(n)   // ⭐ NEU
+  // =========================
+  // QUOTE finden (nur NACH dem Match)
+  // =========================
+  if (matchLine) {
+    const matchIndex = lines.indexOf(matchLine);
+
+    for (let i = matchIndex + 1; i < lines.length; i++) {
+      const cleaned = lines[i].replace(",", ".");
+      const num = cleaned.match(/^\d+(\.\d+)?$/);
+
+      if (num) {
+        const val = parseFloat(num[0]);
+
+        // Markt-Zahlen wie 38.5 ausschließen
+        if (val >= 1.01 && val <= 100) {
+          odds = val;
+          break;
+        }
+      }
+    }
+  }
+
+  // =========================
+  // EINSATZ
+  // =========================
+  const stakeIndex = lines.findIndex(l =>
+    l.toLowerCase().includes("einsatz")
+  );
+
+  if (stakeIndex !== -1 && lines[stakeIndex + 1]) {
+    stake = parseFloat(
+      lines[stakeIndex + 1].replace(/[€\s]/g, "").replace(",", ".")
     );
   }
 
+  // =========================
+  // GEWINN
+  // =========================
+  const winIndex = lines.findIndex(l =>
+    l.toLowerCase().includes("gesamtgewinn")
+  );
 
-  // 7) Parsing Loop
-  for (let i = 0; i < lines.length; i++) {
-    const n = lines[i];
-    const lower = n.toLowerCase();
-
-    // Debug: jede Zeile mit Index ausgeben
-    console.log(i, JSON.stringify(n));
-
-    if (isSkipLine(n)) continue;
-
-    // TEAM
-    if (teamRegex.test(n) && !/\d+[.,]\d+/.test(n)) {
-      const parts = n.split(teamRegex).map(p => p.trim()).filter(Boolean);
-      if (parts.length === 2) {
-        team1 = parts[0];
-        team2 = parts[1];
-        continue;
-      }
-    }
-
-    // KONFIGURATOR
-    if (/konfigurator/i.test(n)) {
-      isConfigurator = true;
-      continue;
-    }
-
-    if (isConfigurator && marketKeywords.some(k => lower.includes(k))) {
-      selections.push(n);
-      continue;
-    }
-
-    // ⭐ DIREKTE HANDICAP-/SPREAD-ZEILE (z. B. "TCU +13.5", "Michigan - 10.5")
-    if (/^[A-Za-z].*\s[+-]\s*\d+(?:[.,]\d+)?$/.test(n)) {
-      marketMain = n;   // z. B. "TCU +13.5"
-      continue;
-    }
-
-
-    // HANDICAP (frisst KEINE Geldbeträge mehr)
-    const hMatch = handicapRegex.exec(n);
-    if (
-      hMatch &&
-      !amountRegex.test(n) &&        // verhindert €2,50, €4,02, 5,3% etc.
-      !/%/.test(n) &&                // ⭐ verhindert 5,3% Wettsteuer
-      !/einsatz|gewinn|credit/i.test(n)
-    ) {
-      let hValue = hMatch[1].replace(",", ".").replace("½", ".5");
-      marketMain = n;
-      continue;
-    }
-
-
-
-    // MARKT
-    if (
-      !/einsatz|gewinn|gesamtgewinn|auszahlung|rückzahlung|steuer|wettsteuer/i.test(n) &&
-      marketKeywords.some(k => lower.includes(k))
-    ) {
-      if (/handicap/i.test(n) && !handicapRegex.test(n)) continue;
-      if (!marketMain) marketMain = n;
-      else if (!marketSub) marketSub = n;
-      continue;
-    }
-
-
-
-    // QUOTE – nur wenn wir NICHT gerade einen Betrag erwarten
-    if (!expectNumberFor && !/[€%]/.test(n) && !/einsatz|gewinn|auszahlung|steuer|wettsteuer/i.test(n)) {
-      const odds = extractOdds(n);
-      if (odds) {
-        totalOdds = odds;
-        continue;
-      }
-    }
-
-
-    // ⭐ EINSATZ
-    if (/^einsatz$/i.test(n) || /^einsatzbetrag$/i.test(n) || /setzen sie/i.test(n)) {
-      console.log(">>> Einsatz-Zeile erkannt:", JSON.stringify(n));
-      expectNumberFor = "stake";
-      continue;
-    }
-
-    if (expectNumberFor === "stake") {
-      console.log(">>> Erwartet Einsatz-Betrag in Zeile:", JSON.stringify(n));
-      const num = n.match(amountRegex);
-      console.log(">>> Match Einsatz:", num);
-      if (num) {
-        totalStake = parseFloat(num[1].replace(",", "."));
-        expectNumberFor = null;
-        continue;
-      }
-    }
-
-    // ⭐ GEWINN
-    if (/^gesamtgewinn$/i.test(n) || /^gewinn$/i.test(n) || /auszahlung/i.test(n)) {
-      console.log(">>> Gewinn-Zeile erkannt:", JSON.stringify(n));
-      expectNumberFor = "win";
-      continue;
-    }
-
-    if (expectNumberFor === "win") {
-      console.log(">>> Erwartet Gewinn-Betrag in Zeile:", JSON.stringify(n));
-      const num = n.match(amountRegex);
-      console.log(">>> Match Gewinn:", num);
-      if (num) {
-        possibleWin = parseFloat(num[1].replace(",", "."));
-        expectNumberFor = null;
-        continue;
-      }
-    }
-
+  if (winIndex !== -1 && lines[winIndex + 1]) {
+    possibleWin = parseFloat(
+      lines[winIndex + 1].replace(/[€\s]/g, "").replace(",", ".")
+    );
   }
 
-  // 8) Markt finalisieren
-  const finalMarket = marketSub
-    ? `${marketMain} | ${marketSub}`
-    : marketMain;
-
-  // 9) Return
+  // =========================
+  // RETURN-OBJEKT
+  // =========================
   return {
     bookmaker: "bet365",
     type: "single",
@@ -2947,16 +2898,17 @@ console.log(JSON.stringify(rawLines, null, 2));
         match: team1 && team2 ? `${team1} 🆚 ${team2}` : null,
         team1,
         team2,
-        market: finalMarket,
-        odds: totalOdds,
-        stake: totalStake
+        market,
+        odds,
+        stake
       }
     ],
-    totalStake,
-    totalOdds,
+    totalStake: stake,
+    totalOdds: odds ?? null,
     possibleWin
   };
 }
+
 
 
 
