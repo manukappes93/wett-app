@@ -471,6 +471,20 @@ select {
   font-size: 16px;
 }
 
+.sport-select-container {
+  position: fixed;
+  top: 20%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #222;
+  padding: 20px;
+  border-radius: 10px;
+  color: white;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
 
   </style>
 </head>
@@ -702,6 +716,8 @@ let isTimePickerOpen = false;     // Verhindert UI-Refresh während Timepicker a
 let lastLoadedDay = null;
 let showLaendertipps = true;      // Filter: Ländertipps anzeigen
 let showZusatztipps = true;       // Filter: Zusatztipps anzeigen
+let pendingBet365 = null;
+
 
 
 /* Sportarten Icons */
@@ -746,6 +762,50 @@ function autoShrinkText(el, minSize = 10) {
     el.style.fontSize = size + "px";
   }
 }
+
+/* ============================
+   Sportarten Dropdown
+============================ */
+function showSportDropdown(parsed) {
+  const container = document.createElement("div");
+  container.className = "sport-select-container";
+  container.id = "sportSelectOverlay";
+
+  const label = document.createElement("label");
+  label.textContent = "Sportart auswählen:";
+  container.appendChild(label);
+
+  const select = document.createElement("select");
+  select.innerHTML = `
+    <option value="">Bitte wählen…</option>
+    <option value="football">⚽ Fußball</option>
+    <option value="basketball">🏀 Basketball</option>
+    <option value="tennis">🎾 Tennis</option>
+    <option value="icehockey">🏒 Eishockey</option>
+    <option value="handball">🤾 Handball</option>
+  `;
+  container.appendChild(select);
+
+  const btn = document.createElement("button");
+  btn.textContent = "Übernehmen";
+  container.appendChild(btn);
+
+  btn.onclick = () => {
+    if (!select.value) return;
+
+    pendingBet365.sport = select.value;
+    pendingBet365.bets[0].sport = select.value;
+    pendingBet365.needsSportSelection = false;
+
+    finalizeParsedSlip(pendingBet365);
+
+    pendingBet365 = null;
+    container.remove();
+  };
+
+  document.body.appendChild(container);
+}
+
 
 
 /* ============================
@@ -1286,7 +1346,6 @@ function markMatchAsEdited(edit, data) {
 /* ============================
    Zusatzwette hinzufügen 
 ============================ */
-
 document.getElementById("btnTipster").onclick = async () => {
   const input = document.getElementById("tipsterBetInput");
   const overlay = document.getElementById("tipsterOverlay");
@@ -1315,7 +1374,6 @@ document.getElementById("btnTipster").onclick = async () => {
 /* ============================
    Import-Funktion
 ============================ */
-
 document.getElementById("btnTipsterImport").onclick = async () => {
   const raw = document.getElementById("tipsterBetInput").value.trim();
   if (!raw) {
@@ -1324,35 +1382,45 @@ document.getElementById("btnTipsterImport").onclick = async () => {
   }
 
   const parsed = parseBetInput(raw);
-  const bookmaker = parsed.bookmaker || "generic";
 
-/* ============================
-   PARSER NORMALISIEREN
-============================ */
-// parsed.bets sicherstellen
-parsed.bets = Array.isArray(parsed.bets)
-  ? parsed.bets
-      .filter(b => b && typeof b === "object") // entfernt undefined / null / falsche Typen
-      .map(b => ({
-        ...b,
-        team1: b.team1 ?? "",
-        team2: b.team2 ?? "",
-        market: b.market ?? "",
-        odds: b.odds ?? null,
-        stake: b.stake ?? null
-      }))
-  : [];
+  // ⭐ Wenn bet365 → parsed speichern + Dropdown öffnen
+  if (parsed.bookmaker === "bet365" && parsed.needsSportSelection) {
+    pendingBet365 = parsed;        // WICHTIG!
+    showSportDropdown(parsed);
+    return;
+  }
+
+  // ⭐ Wenn kein bet365 oder Sport schon gesetzt → direkt finalisieren
+  finalizeParsedSlip(parsed);
+};
 
 
+function finalizeParsedSlip(parsed) {
 
-parsed.totalStake = parsed.totalStake ?? parsed.einsatz;
-parsed.possibleWin = parsed.possibleWin ?? parsed.gewinn;
-parsed.totalOdds = parsed.totalOdds ?? parsed.quoteGesamt;
+  parsed.country = "Zusatztipp";
 
-parsed.type = parsed.type === "kombi" ? "combo" : parsed.type;
+  /* ============================
+     PARSER NORMALISIEREN
+  ============================ */
 
+  parsed.bets = Array.isArray(parsed.bets)
+    ? parsed.bets
+        .filter(b => b && typeof b === "object")
+        .map(b => ({
+          ...b,
+          team1: b.team1 ?? "",
+          team2: b.team2 ?? "",
+          market: b.market ?? "",
+          odds: b.odds ?? null,
+          stake: b.stake ?? null
+        }))
+    : [];
 
-  console.log("Parser Ergebnis:", parsed);
+  parsed.totalStake = parsed.totalStake ?? parsed.einsatz;
+  parsed.possibleWin = parsed.possibleWin ?? parsed.gewinn;
+  parsed.totalOdds = parsed.totalOdds ?? parsed.quoteGesamt;
+
+  parsed.type = parsed.type === "kombi" ? "combo" : parsed.type;
 
   const tippster = document.getElementById("tipsterSelect").value;
 
@@ -1360,87 +1428,68 @@ parsed.type = parsed.type === "kombi" ? "combo" : parsed.type;
        MATCHNAME bestimmen
   ============================= */
 
-let matchName = "";
+  const b = parsed.bets[0];
+  const safeTeam1 = (b.team1 || "").replace("* ", "");
+  const safeTeam2 = b.team2 || "";
+  const matchName = `${safeTeam1} – ${safeTeam2}`;
 
-const b = parsed.bets[0];
+  parsed.bets = parsed.bets.map(b => ({
+    ...b,
+    market: b.market ?? "",
+    team1: b.team1 ?? b.match?.split(" 🆚 ")[0] ?? "",
+    team2: b.team2 ?? b.match?.split(" 🆚 ")[1] ?? "",
+    tipp: b.tipp ?? "",
+    odds: b.odds ?? null,
+    quote: b.quote ?? null
+  }));
 
-// Match immer aus team1 + team2 erzeugen
-const safeTeam1 = (b.team1 || "").replace("* ", "");
-const safeTeam2 = b.team2 || "";
-matchName = `${safeTeam1} – ${safeTeam2}`;
+  const entry = {
+    country: "Zusatztipp",
+    match: matchName,
+    time: "",
+    bookmaker: parsed.bookmaker || "generic",
 
+    sport: parsed.sport,
 
-if (parsed.type === "single" || parsed.type === "kombi") {
-  // gleicher Code
-}
-
-// ============================
-// BETS absichern (kein undefined erlauben)
-// ============================
-parsed.bets = parsed.bets.map(b => ({
-  ...b,
-  market: b.market ?? "",
-  team1: b.team1 ?? b.match?.split(" 🆚 ")[0] ?? "",
-  team2: b.team2 ?? b.match?.split(" 🆚 ")[1] ?? "",
-  tipp: b.tipp ?? "",
-  odds: b.odds ?? null,
-  quote: b.quote ?? null
-}));
-
-
-// EIN EINZIGER BLOCK
-const entry = {
-  country: "Zusatztipp",
-  match: matchName,
-  time: "",
-  bookmaker: parsed.bookmaker || "generic",
-
-  sport: parsed.sport,   // ⭐ WICHTIG – HIER EINFÜGEN
-
-  tips:
-    parsed.type === "single"
-      ? [
-          {
-            label: parsed.bets[0].market,
+    tips:
+      parsed.type === "single"
+        ? [
+            {
+              label: parsed.bets[0].market,
+              value: "",
+              quote: parsed.bets[0].odds,
+              color: "reset",
+              favorite: true
+            }
+          ]
+        : parsed.bets.map(b => ({
+            label: b.market,
             value: "",
-            quote: parsed.bets[0].odds,
+            quote: b.odds,
             color: "reset",
             favorite: true
-          }
-        ]
-      : parsed.bets.map(b => ({
-          label: b.market,
-          value: "",
-          quote: b.odds,
-          color: "reset",
-          favorite: true
-        })),
+          })),
 
-  extra: {
-    type: parsed.type,
-    bets: parsed.bets || [],
-    einsatz: parsed.totalStake,
-    gewinn: parsed.possibleWin || 0,
-    quoteGesamt: parsed.totalOdds,
-    tippster
-  }
-};
+    extra: {
+      type: parsed.type,
+      bets: parsed.bets || [],
+      einsatz: parsed.totalStake,
+      gewinn: parsed.possibleWin || 0,
+      quoteGesamt: parsed.totalOdds,
+      tippster
+    }
+  };
 
-
-
-
-  // In Liste einfügen
   currentEntries.unshift(entry);
 
-  // UI aktualisieren
   refreshUI();
   updateStats();
   updateExtraStats();
   updateCountryStats();
 
-  // Overlay schließen
   document.getElementById("tipsterOverlay").style.display = "none";
-};
+}
+
 
 /* ============================
    Tippzeilen färben
@@ -1946,7 +1995,7 @@ if (entry.country === "Zusatztipp") {
 
       tipDiv.innerHTML = `
         <div style="font-size:15px; margin-bottom:4px;">
-          <strong>${b.team1} – ${b.team2}</strong>
+          <strong>${b.team1} 🆚 ${b.team2}</strong>
         </div>
 
         <div style="font-size:14px; margin-bottom:6px;">
@@ -2110,33 +2159,41 @@ content.querySelectorAll(".btn-sub-reset").forEach(btn => {
      ===================================================== */
 
   row.innerHTML = `
-    <span class="tip-label" style="font-size:12px; line-height:1.3; display:block; width:100%;">
-      <strong>${entry.match || ""}</strong><br><br>
-      ${bets
-        .map(
-          (b) => `
-            <em>${b.market}</em>
-          `
-        )
-        .join("<br><br>")}
-    </span>
+  <span class="tip-label" style="font-size:12px; line-height:1.3; display:block; width:100%;">
 
-    <input type="number" step="0.01" class="quote-input" 
-           value="${quoteValue}" 
-           style="font-size:18px; font-weight:bold; width:80px;">
+    <strong>${
+      entry.country === "Zusatztipp" && entry.extra?.bets?.length
+        ? entry.extra.bets[0].match
+        : entry.match
+    }</strong><br><br>
 
-    <div style="display:flex; align-items:center; gap:4px;">
-      <input type="number" step="0.01" class="einsatz-input" 
-             value="${einsatzValue}" 
-             style="font-size:16px; width:70px; text-align:right;">
-      <span>€</span>
-    </div>
+    ${bets
+      .map(
+        (b) => `
+          <em>${b.market}</em>
+        `
+      )
+      .join("<br><br>")}
 
-    <button class="btn-correct">✔️</button>
-    <button class="btn-wrong">❌</button>
-    <button class="btn-neutral">➖</button>
-    <button class="btn-reset">⭯</button>
-  `;
+  </span>
+
+  <input type="number" step="0.01" class="quote-input" 
+         value="${quoteValue}" 
+         style="font-size:18px; font-weight:bold; width:80px;">
+
+  <div style="display:flex; align-items:center; gap:4px;">
+    <input type="number" step="0.01" class="einsatz-input" 
+           value="${einsatzValue}" 
+           style="font-size:16px; width:70px; text-align:right;">
+    <span>€</span>
+  </div>
+
+  <button class="btn-correct">✔️</button>
+  <button class="btn-wrong">❌</button>
+  <button class="btn-neutral">➖</button>
+  <button class="btn-reset">⭯</button>
+`;
+
 
   content.appendChild(row);
 
@@ -3214,17 +3271,6 @@ function parseBet365(text) {
 
 
 // =========================
-// Bet365 Müllzeilen entfernen
-// =========================
-const BET365_TRASH = [
-  "• Live-Benachrichtigungen",
-  "Auswahlen wiederverwenden",
-  "5,3% Wettsteuer",
-  "Gratis",
-  "Nettogewinne schließen den Einsatz von Wett-Credits aus"
-];
-
-// =========================
 // Bet365 SINGLE PARSER
 // =========================
 function parseBet365Single(text) {
@@ -3234,8 +3280,38 @@ function parseBet365Single(text) {
     .map(l => l.trim())
     .filter(l => l.length > 0);
 
-  // Müll entfernen
-  lines = lines.filter(l => !BET365_TRASH.includes(l));
+  // =========================
+  // Alles vor "Live-Benachrichtigungen" entfernen
+  // =========================
+  const liveIndex = lines.findIndex(l =>
+    l
+      .toLowerCase()
+      .replace(/[^a-z0-9äöüß\- ]/gi, "")   // Sonderzeichen entfernen
+      .includes("live-benachrichtigungen")
+  );
+
+  if (liveIndex !== -1) {
+    lines = lines.slice(liveIndex + 1);
+  }
+
+  // =========================
+  // Müllzeilen entfernen (robust)
+  // =========================
+  const BET365_TRASH = [
+    "live-benachrichtigungen",
+    "auswahlen wiederverwenden",
+    "top-wetten",
+    "wettsteuer",
+    "5,3% wettsteuer",
+    "gratis",
+    "nettogewinne schließen den einsatz von wett credits aus",
+    "nettogewinne schließen den einsatz von wett-credits aus"
+  ];
+
+  lines = lines.filter(l => {
+    const low = l.toLowerCase();
+    return !BET365_TRASH.some(t => low.includes(t));
+  });
 
   let market = null;
   let matchLine = null;
@@ -3258,22 +3334,21 @@ function parseBet365Single(text) {
   }
 
   // =========================
-  // MARKET extrahieren (alle Zeilen über dem Match)
+  // MARKET extrahieren
   // =========================
   if (matchLine) {
     const matchIndex = lines.indexOf(matchLine);
     const marketLines = [];
 
     for (let i = matchIndex - 1; i >= 0; i--) {
-      const l = lines[i];
+      const l = lines[i].toLowerCase();
 
-      // Stop-Kriterien
-      if (BET365_TRASH.includes(l)) break;
-      if (l.toLowerCase().includes("einsatz")) break;
-      if (l.toLowerCase().includes("gesamtgewinn")) break;
-      if (l.toLowerCase().includes("wett-credits")) break;
+      if (l.includes("einsatz")) break;
+      if (l.includes("gesamtgewinn")) break;
+      if (l.includes("wett-credits")) break;
+      if (BET365_TRASH.some(t => l.includes(t))) break;
 
-      marketLines.unshift(l);
+      marketLines.unshift(lines[i]);
     }
 
     market = marketLines.join(" ").trim();
@@ -3293,8 +3368,11 @@ function parseBet365Single(text) {
     [team1, team2] = cleaned.split(" v ").map(t => t.trim());
   }
 
+  const normalizedMatch =
+    team1 && team2 ? `${team1} 🆚 ${team2}` : "";
+
   // =========================
-  // QUOTE finden (nur NACH dem Match)
+  // QUOTE finden
   // =========================
   if (matchLine) {
     const matchIndex = lines.indexOf(matchLine);
@@ -3306,7 +3384,6 @@ function parseBet365Single(text) {
       if (num) {
         const val = parseFloat(num[0]);
 
-        // Markt-Zahlen wie 38.5 ausschließen
         if (val >= 1.01 && val <= 100) {
           odds = val;
           break;
@@ -3341,28 +3418,29 @@ function parseBet365Single(text) {
     );
   }
 
-  // =========================
-  // RETURN-OBJEKT
-  // =========================
   return {
     bookmaker: "bet365",
     type: "single",
+    needsSportSelection: true,
+    sport: null,
+
     bets: [
       {
-        match: team1 && team2 ? `${team1} 🆚 ${team2}` : null,
+        match: normalizedMatch,
         team1,
         team2,
         market,
         odds,
-        stake
+        stake,
+        sport: null
       }
     ],
+
     totalStake: stake,
-    totalOdds: odds ?? null,
+    totalOdds: odds,
     possibleWin
   };
 }
-
 
 
 
@@ -3904,9 +3982,12 @@ function updateCountryUI() {
   renderCountryStats(stats);            // Rahmen neu zeichnen
 }
 
-function normalizeCountry(name) {
-  return name.trim();
+function normalizeCountry(country) {
+    if (!country) return "";
+    return country.trim();
 }
+
+
 
 function updateEntryBorder(ei) {
   const entryBlock = document.querySelectorAll(".entry")[ei];
