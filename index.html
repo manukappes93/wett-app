@@ -724,6 +724,8 @@ let pendingBet365 = null;
 const SPORT_ICONS = {
   football: "⚽",
   tennis: "🎾",
+  americanfootball: "🏈",
+  baseball: "⚾",
   basketball: "🏀",
   handball: "🤾",
   icehockey: "🏒",
@@ -780,9 +782,13 @@ function showSportDropdown(parsed) {
     <option value="">Bitte wählen…</option>
     <option value="football">⚽ Fußball</option>
     <option value="basketball">🏀 Basketball</option>
+    <option value="americanfootball">🏈 American Football</option>
+    <option value="baseball">⚾ Baseball</option>
     <option value="tennis">🎾 Tennis</option>
     <option value="icehockey">🏒 Eishockey</option>
     <option value="handball">🤾 Handball</option>
+    <option value="darts">🎯 Darts</option>
+    <option value="formula1">🏎️ Formel 1</option>
   `;
   container.appendChild(select);
 
@@ -3210,6 +3216,8 @@ function parseBetInput(text) {
 
 const SPORT_KEYWORDS = {
   football: ["fußball", "football", "soccer", "bundesliga", "premier league", "laliga", "serie a", "ligue 1"],
+  americanfootball: ["american football", "nfl"],
+  baseball: ["baseball", "mlb"],
   tennis: ["tennis", "atp", "wta", "grand slam", "satz", "tiebreak"],
   basketball: ["basketball", "nba", "euroleague"],
   handball: ["handball", "hbl"],
@@ -3677,6 +3685,7 @@ function extractSportFromLine(line) {
     "football": "football",
     "soccer": "football",
     "tennis": "tennis",
+    "baseball": "baseball",
     "basketball": "basketball",
     "eishockey": "icehockey",
     "hockey": "icehockey",
