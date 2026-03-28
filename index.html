@@ -1249,7 +1249,7 @@ function getTipType(tip) {
 ============================ */
 
 function openEditMatchOverlay(edit) {
-  const entry = currentEntries[parseInt(edit.entryId)];
+  const entry = currentEntries.find(e => e.id === edit.entryId);
   if (!entry) return;
 
   let team1 = "";
@@ -1450,6 +1450,7 @@ function finalizeParsedSlip(parsed) {
   }));
 
   const entry = {
+    id: crypto.randomUUID(),   // NEU
     country: "Zusatztipp",
     match: matchName,
     time: "",
@@ -1666,7 +1667,7 @@ function renderEntries() {
     if (!isCombo) {
       const edit = document.createElement("span");
       edit.className = "edit-match";
-      edit.dataset.entryId = ei;
+      edit.dataset.entryId = entry.id;
       edit.dataset.betIndex = "";
       edit.textContent = "✏️";
       header.appendChild(edit);
@@ -1771,7 +1772,7 @@ function renderEntries() {
                 const edit = document.createElement("span");
                 edit.className = "edit-match";
                 edit.dataset.match = b.match;
-                edit.dataset.entryId = ei;
+                edit.dataset.entryId = entry.id;
                 edit.dataset.betIndex = i;
                 edit.textContent = "✏️";
                 row.appendChild(edit);
@@ -2859,6 +2860,13 @@ document.getElementById("loadSelectedDay").onclick = async () => {
 
       // ⭐ Einträge laden
       currentEntries = data.entries || [];
+
+      // ⭐ Jedem Eintrag eine stabile ID geben (Migration für alte Tage)
+      currentEntries = currentEntries.map(e => ({
+        id: e.id || crypto.randomUUID(),
+        ...e
+      }));
+
       
       currentEntries.forEach(e => {
         if (e.country === "Zusatztipp") {
