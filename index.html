@@ -285,6 +285,7 @@ select {
   margin-right: 6px;
   opacity: 0.85;
   vertical-align: middle;
+  flex-shrink: 0;
 }
 
 .tip-ampel {
@@ -326,8 +327,10 @@ select {
 .entry-header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  width: 100%;
 }
+
 
 .header-time {
   width: 55px;
@@ -340,20 +343,28 @@ select {
 }
 
 .header-country {
-  width: 80px;
+  width: 160px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
-.header-match {
-  flex: 1;
+/* Länder kleiner */
+.header-country.is-country {
+  font-size: 14px;
 }
+
+/* Tippster normal */
+.header-country.is-tippster {
+  font-size: 18px;
+}
+
 
 .header-check {
   color: #2ecc71;
   font-size: 18px;
   margin-left: 6px;
+  flex-shrink: 0;
 }
 
 .header-timepicker {
@@ -365,12 +376,14 @@ select {
   background: transparent;
   font-weight: bold;
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 
 .toggle-arrow {
   width: 20px;
   text-align: right;
+  flex-shrink: 0;
 }
 
 .country-box {
@@ -434,6 +447,31 @@ select {
   opacity: 1;
 }
 
+.header-match {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+}
+
+
+.kombi-match-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.kombi-match-text {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+  font-size: 16px;
+}
+
+
   </style>
 </head>
 
@@ -452,7 +490,6 @@ select {
 
   <div class="button-row">
   <button id="showStats">📊 Statistik</button>
-  <button id="saveDay">💾 Speichern</button>
   <button id="btnCountryStats" class="stats-button">🌍 Gesamtbilanz</button>
 
   <label class="inline-check">
@@ -662,7 +699,7 @@ let loadedDay = null;             // Welcher Tag ist geladen?
 let globalCountryStats = {};      // Globale Statistik aller Tage
 let days = {};
 let isTimePickerOpen = false;     // Verhindert UI-Refresh während Timepicker aktiv ist
-
+let lastLoadedDay = null;
 let showLaendertipps = true;      // Filter: Ländertipps anzeigen
 let showZusatztipps = true;       // Filter: Zusatztipps anzeigen
 
@@ -701,6 +738,16 @@ function today() {
   return new Date().toISOString().split("T")[0];
 }
 
+function autoShrinkText(el, minSize = 10) {
+  let size = parseFloat(window.getComputedStyle(el).fontSize);
+
+  while (el.scrollWidth > el.clientWidth && size > minSize) {
+    size -= 1;
+    el.style.fontSize = size + "px";
+  }
+}
+
+
 /* ============================
    TEAMS AUS MATCH-TEXT HOLEN
 ============================ */
@@ -724,7 +771,7 @@ document.getElementById("editMatchSave").addEventListener("click", () => {
   const team1 = document.getElementById("editTeam1").value.trim();
   const team2 = document.getElementById("editTeam2").value.trim();
 
-  const newMatch = team2 ? `${team1} – ${team2}` : team1;
+  const newMatch = team2 ? `${team1} 🆚 ${team2}` : team1;
 
   updateMatchInUI(currentEdit, newMatch);
 
@@ -1512,50 +1559,85 @@ function renderEntries() {
     const content = document.createElement("div");
     content.className = "entry-content";
 
-    /* ⭐ Header */
+
+
+    /* ============================
+      Header mit Zeit, Status, Match, Edit-Button
+    ============================ */
     const header = document.createElement("div");
     header.className = "entry-header";
 
-    header.innerHTML = `
-      <input type="time" class="header-timepicker" value="${entry.time || ''}">
-      
-      <span class="header-status" id="header-status-${ei}" style="display:inline-block; width:100px; overflow:hidden; white-space:nowrap;"></span>
+    /* ⭐ Kombi-Erkennung */
+    const isCombo =
+      entry.country === "Zusatztipp" &&
+      entry.extra &&
+      Array.isArray(entry.extra.bets);
 
-      <span class="header-country" style="display:inline-block; width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-        ${
-          entry.country === "Zusatztipp"
-            ? entry.extra?.tippster || "Zusatztipp"
-            : normalizeCountry(entry.country)
-        }
-      </span>
+    /* --- TIMEPICKER --- */
+    const time = document.createElement("input");
+    time.type = "time";
+    time.className = "header-timepicker";
+    time.value = entry.time || "";
+    header.appendChild(time);
 
-      <span class="header-match">${entry.match || ""}</span>
+    /* --- STATUS --- */
+    const status = document.createElement("span");
+    status.className = "header-status";
+    status.id = `header-status-${ei}`;
+    header.appendChild(status);
 
-      <!-- ⭐ NEU: Stift für Einzel- und Ländertipps -->
-      ${
-        entry.country !== "Zusatztipp"
-          ? `<span class="edit-match" data-entry-id="${ei}" data-bet-index="">✏️</span>`
-          : ""
-      }
+    /* --- COUNTRY / TIPPSTER --- */
+    const country = document.createElement("span");
+    country.className = "header-country";
 
-      <span class="header-check" id="header-check-${ei}"></span>
-      <span class="toggle-arrow">▲</span>
-    `;
-
-
-    // ⭐ Sport-Icon vor dem Match einfügen
-    const matchSpan = header.querySelector(".header-match");
-    if (matchSpan) {
-      let sportKey = (entry.sport || "unknown").trim().toLowerCase();
-
-      // ⭐ Ländertipps = immer Fußball
-      if (entry.country !== "Zusatztipp") {
-        sportKey = "football";
-      }
-
-      const icon = SPORT_ICONS[sportKey] || "❓";
-      matchSpan.innerHTML = `${icon} ${matchSpan.innerHTML}`;
+    if (entry.country === "Zusatztipp") {
+        country.classList.add("is-tippster");
+        country.textContent = entry.extra?.tippster || "Zusatztipp";
+    } else {
+        country.classList.add("is-country");
+        country.textContent = normalizeCountry(entry.country);
     }
+
+    header.appendChild(country);
+
+
+    /* --- MATCH TEXT --- */
+    const match = document.createElement("span");
+    match.className = "header-match";
+    match.textContent = entry.match || "";
+    header.appendChild(match);
+
+    /* --- EDIT BUTTON (nur wenn kein Kombi) --- */
+    if (!isCombo) {
+      const edit = document.createElement("span");
+      edit.className = "edit-match";
+      edit.dataset.entryId = ei;
+      edit.dataset.betIndex = "";
+      edit.textContent = "✏️";
+      header.appendChild(edit);
+    }
+
+    /* --- CHECKMARK --- */
+    const check = document.createElement("span");
+    check.className = "header-check";
+    check.id = `header-check-${ei}`;
+    header.appendChild(check);
+
+    /* --- TOGGLE ARROW --- */
+    const arrow = document.createElement("span");
+    arrow.className = "toggle-arrow";
+    arrow.textContent = "▲";
+    header.appendChild(arrow);
+
+    /* --- SPORT ICON + AUTO SHRINK --- */
+    let sportKey = (entry.sport || "unknown").trim().toLowerCase();
+    if (entry.country !== "Zusatztipp") sportKey = "football";
+
+    const icon = SPORT_ICONS[sportKey] || "❓";
+    match.textContent = `${icon} ${match.textContent}`;
+
+    autoShrinkText(match);
+
 
 
 
@@ -1608,47 +1690,46 @@ function renderEntries() {
     // Logo direkt nach dem Country-Span einfügen
       countrySpan.insertAdjacentElement("afterend", logo);
 
-    /* ⭐⭐ HIER KOMMT DER KOMBI-HEADER HIN ⭐⭐ */
-    if (entry.country === "Zusatztipp") {
-      const extra = entry.extra || {};
-      const isKombi = ["kombi", "combo", "accumulator"].includes(extra.type);
-      const bets = Array.isArray(extra.bets) ? extra.bets : [];
+    /* ⭐⭐ KOMBI-HEADER (DOM-Version) ⭐⭐ */
+    if (isCombo) {
+        const extra = entry.extra || {};
+        const bets = Array.isArray(extra.bets) ? extra.bets : [];
 
-      if (isKombi && bets.length) {
-        const matchSpan = header.querySelector(".header-match");
-        const matches = bets
-          .map(b => b.match || "")
-          .filter(m => m.trim().length > 0);
+        if (bets.length) {
+            // MATCH-BLOCK LEEREN
+            const matchBlock = header.querySelector(".header-match");
+            matchBlock.textContent = ""; // wichtig!
 
-        const sportKey = (entry.sport || bets[0]?.sport || "unknown").trim().toLowerCase();
-        const icon = SPORT_ICONS[sportKey] || "❓";
+            // Jede Kombi-Zeile DOM-basiert erzeugen
+            bets.slice(0, 2).forEach((b, i) => {
+                const row = document.createElement("div");
+                row.className = "kombi-match-row";
 
-        if (matches.length) {
-          // Jede Partie einzeln mit Sportart-Icon rendern
-          const renderedMatches = bets.slice(0, 2).map((b, i) => {
-          const sportKey = (b.sport || entry.sport || "unknown").trim().toLowerCase();
-          const icon = SPORT_ICONS[sportKey] || "❓";
+                const sportKey = (b.sport || entry.sport || "unknown").trim().toLowerCase();
+                const icon = SPORT_ICONS[sportKey] || "❓";
 
-          return `
-            <div class="kombi-match-row">
-              <span class="kombi-match-text">${icon} ${b.match}</span>
-              <span class="edit-match"
-                data-match="${b.match}"
-                data-entry-id="${ei}"
-                data-bet-index="${i}">✏️</span>
-            </div>
-          `;
-      });
+                const text = document.createElement("span");
+                text.className = "kombi-match-text";
+                text.textContent = `${icon} ${b.match}`;
+                row.appendChild(text);
 
-      matchSpan.innerHTML = renderedMatches.join("");
+                const edit = document.createElement("span");
+                edit.className = "edit-match";
+                edit.dataset.match = b.match;
+                edit.dataset.entryId = ei;
+                edit.dataset.betIndex = i;
+                edit.textContent = "✏️";
+                row.appendChild(edit);
 
+                matchBlock.appendChild(row);
 
-        } else {
-          matchSpan.innerHTML = `${icon} Kombi-Wette – ${bets.length} Tipp${bets.length > 1 ? "s" : ""}`;
+                // Auto-Shrink für jede Zeile
+                autoShrinkText(text);
+            });
         }
-      }
     }
     /* ⭐⭐ KOMBI-HEADER ENDE ⭐⭐ */
+
 
 
     /* ⭐ Haken setzen */
@@ -2449,7 +2530,6 @@ document.getElementById("readButton").onclick = () => {
     return;
   }
 
-  // Blöcke trennen
   const blocks = raw
     .split(/[\=≠]{5,}/g)
     .map(b => b.trim())
@@ -2468,9 +2548,7 @@ document.getElementById("readButton").onclick = () => {
     let correctScore = "";
     let bothTeams = "";
 
-    /* -----------------------------
-       Land extrahieren
-    ----------------------------- */
+    // Land extrahieren
     lines.forEach((line, idx) => {
       if (/°{3,}/.test(line)) {
         const prev = lines[idx - 1] || "";
@@ -2478,16 +2556,10 @@ document.getElementById("readButton").onclick = () => {
       }
     });
 
-    /* -----------------------------
-       Match + Tipps extrahieren
-    ----------------------------- */
+    // Match + Tipps extrahieren
     lines.forEach(line => {
-      // Match (Ländertipp)
-      if (line.includes("🆚")) {
-        match = line.replace(/▶/g, "").trim();
-      }
+      if (line.includes("🆚")) match = line.replace(/▶/g, "").trim();
 
-      // HT/FT Tipp
       if (/▶\s*[0-9Xx]\s*\/\s*[0-9Xx]/.test(line)) {
         const clean = line.replace(/▶/g, "").trim();
         const parts = clean.split("/");
@@ -2495,21 +2567,14 @@ document.getElementById("readButton").onclick = () => {
         ftTip = parts[1].trim();
       }
 
-      // Correct Score
       if (/Correct/i.test(line) && /(\d+[:;]\d+)/.test(line)) {
         correctScore = line.match(/(\d+[:;]\d+)/)[0].replace(";", ":");
       }
 
-      // Both Teams
-      if (/Both team yes/i.test(line)) {
-        bothTeams = "Ja";
-      }
+      if (/Both team yes/i.test(line)) bothTeams = "Ja";
     });
 
-    /* -----------------------------
-       Teams aus Match extrahieren
-       (nur Ländertipps)
-    ----------------------------- */
+    // Teams extrahieren (nur Ländertipps)
     let team1 = "";
     let team2 = "";
 
@@ -2519,63 +2584,50 @@ document.getElementById("readButton").onclick = () => {
       team2 = (parts[1] || "").trim();
     }
 
-    /* -----------------------------
-       Tipps sammeln
-    ----------------------------- */
+    // Tipps sammeln
     const tips = [];
 
     if (htTip)
-      tips.push({
-        label: "HT Tipp",
-        value: htTip,
-        quote: "",
-        color: "reset",
-        favorite: false
-      });
+      tips.push({ label: "HT Tipp", value: htTip, quote: "", color: "reset", favorite: false });
 
     if (ftTip)
-      tips.push({
-        label: "FT Tipp",
-        value: ftTip,
-        quote: "",
-        color: "reset",
-        favorite: false
-      });
+      tips.push({ label: "FT Tipp", value: ftTip, quote: "", color: "reset", favorite: false });
 
     if (correctScore)
-      tips.push({
-        label: "Genaues Ergebnis",
-        value: correctScore,
-        quote: "",
-        color: "reset",
-        favorite: false
-      });
+      tips.push({ label: "Genaues Ergebnis", value: correctScore, quote: "", color: "reset", favorite: false });
 
     if (bothTeams)
-      tips.push({
-        label: "Beide Teams treffen",
-        value: "Ja",
-        quote: "",
-        color: "reset",
-        favorite: false
-      });
+      tips.push({ label: "Beide Teams treffen", value: "Ja", quote: "", color: "reset", favorite: false });
 
-    /* -----------------------------
-       Entry speichern
-    ----------------------------- */
+    // ⭐ Bookmaker setzen:
+    // Ländertipps = immer 22bet
+    // Zusatztipps behalten ihren eigenen Bookmaker
+
+    const bookmaker = country !== "Zusatztipp" ? "22bet" : (entry?.bookmaker || "generic");
+
+    // ⭐ Sport setzen:
+    // Ländertipps = immer Fußball
+    // Zusatztipps behalten ihren eigenen Sport (falls vorhanden)
+    const sport = country !== "Zusatztipp" ? "football" : (entry?.sport || "");
+
+    // Entry speichern
     currentEntries.push({
       country,
       match,
       team1,
       team2,
       tips,
-      time: ""
+      time: "",
+      bookmaker,
+      sport
     });
+
   });
 
   refreshUI();
   document.getElementById("textInput").value = "";
 };
+
 
 
 /* ============================
@@ -2643,7 +2695,7 @@ document.getElementById("confirmSaveName").onclick = async () => {
 
         entry.team1 = t1;
         entry.team2 = t2;
-        entry.match = t2 ? `${t1} – ${t2}` : t1;
+        entry.match = t2 ? `${t1} 🆚 ${t2}` : t1;
       }
 
       /* -----------------------------
@@ -2662,7 +2714,7 @@ document.getElementById("confirmSaveName").onclick = async () => {
 
           bet.team1 = t1;
           bet.team2 = t2;
-          bet.match = t2 ? `${t1} – ${t2}` : t1;
+          bet.match = t2 ? `${t1} 🆚 ${t2}` : t1;
         }
       }
     }
@@ -2829,6 +2881,10 @@ document.getElementById("deleteSelectedDay").onclick = async () => {
   const day = document.getElementById("deleteSelect").value;
   if (!day) return;
 
+  // ⭐ Zusätzliche Sicherheitsabfrage
+  const really = confirm(`Möchten Sie den Tag "${day}" wirklich löschen?`);
+  if (!really) return;
+
   try {
     await rtdb.ref("days/" + day).remove();
     alert("Tag gelöscht: " + day);
@@ -2838,6 +2894,7 @@ document.getElementById("deleteSelectedDay").onclick = async () => {
     alert("Fehler beim Löschen.");
   }
 };
+
 
 /* ============================
    STATISTIK-OVERLAY
