@@ -472,19 +472,101 @@ select {
 }
 
 .sport-select-container {
-  position: fixed;
-  top: 20%;
-  left: 50%;
-  transform: translateX(-50%);
-  background: #222;
-  padding: 20px;
-  border-radius: 10px;
-  color: white;
-  z-index: 9999;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px;
+  background: #f3f3f3;
+  border-radius: 6px;
+  margin-bottom: 15px;
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
+
+
+.sport-select-container select {
+  width: 100%;
+  padding: 10px;
+  font-size: 18px;
+}
+
+.sport-select-container button {
+  width: 100%;
+  padding: 10px;
+  font-size: 18px;
+  background: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.profit-positive {
+  color: #2ecc71; /* Grün */
+  font-weight: 600;
+}
+
+.profit-negative {
+  color: #e74c3c; /* Rot */
+  font-weight: 600;
+}
+
+.profit-neutral {
+  color: #4d4c4cd5; /* grau */
+  font-weight: 600;
+}
+
+.tip-type-box {
+  background: #f7f7f7;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tip-type-box strong {
+  font-size: 16px;
+}
+
+.tip-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 15px;
+}
+
+
+.tip-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  border-bottom: 1px solid #ddd;
+  font-size: 14px;
+}
+
+.tip-row:last-child {
+  border-bottom: none;
+}
+
+.tip-row .type {
+  width: 70px;
+  font-weight: 600;
+}
+
+.tip-row .stats {
+  flex: 1;
+  display: flex;
+  gap: 10px;
+}
+
+.tip-row .profit {
+  width: 90px;
+  text-align: right;
+  font-weight: 600;
+}
+
 
   </style>
 </head>
@@ -796,6 +878,14 @@ function showSportDropdown(parsed) {
   btn.textContent = "Übernehmen";
   container.appendChild(btn);
 
+  const overlayBox = document.querySelector("#tipsterOverlay .overlay-box");
+  const importBtn = document.getElementById("btnTipsterImport");
+
+  // Button blockieren
+  importBtn.disabled = true;
+  importBtn.style.opacity = "0.5";
+  importBtn.style.pointerEvents = "none";
+
   btn.onclick = () => {
     if (!select.value) return;
 
@@ -803,14 +893,22 @@ function showSportDropdown(parsed) {
     pendingBet365.bets[0].sport = select.value;
     pendingBet365.needsSportSelection = false;
 
+    // Button wieder aktivieren
+    importBtn.disabled = false;
+    importBtn.style.opacity = "1";
+    importBtn.style.pointerEvents = "auto";
+
     finalizeParsedSlip(pendingBet365);
 
     pendingBet365 = null;
     container.remove();
   };
 
-  document.body.appendChild(container);
+  // Dropdown über dem Einlesen-Button einfügen
+  overlayBox.insertBefore(container, importBtn);
 }
+
+
 
 
 
@@ -1081,47 +1179,115 @@ async function calculateGlobalCountryStats() {
 
 
 
-
 /* ============================
-   GESAMTBILANZ RENDERN
+   GESAMTBILANZ RENDERN (KOMPAKT)
 ============================ */
 function renderCountryStats(data) {
   const container = document.getElementById("countryStatsContent");
   container.innerHTML = "";
 
-  for (const country in data) {
+  for (const countryKey in data) {
     const box = document.createElement("div");
     box.className = "country-box";
 
+    const baseCountry = countryKey.split(" ")[0];
+    const totalByType = aggregateCountryByType(data, baseCountry);
+    const exact = data[countryKey];
+
     let html = `
       <h3 style="display:flex; align-items:center; gap:6px;">
-        ${country}
-        <span class="country-days-info" data-country="${country}" style="cursor:pointer; font-size:14px;">ℹ️</span>
+        ${countryKey}
+        <span class="country-days-info" data-country="${countryKey}" style="cursor:pointer; font-size:14px;">ℹ️</span>
       </h3>
     `;
 
-    for (const type in data[country]) {
-      const t = data[country][type];
-      const profitClass = t.profit >= 0 ? "profit-positive" : "profit-negative";
+    /* ============================
+       GESAMT-LAND (kompakt)
+    ============================ */
+    html += `<strong>${baseCountry} (gesamt)</strong>`;
 
-      html += `
-        <div class="tip-type-box">
-          <strong>${type}</strong><br>
-          ✔️ ${t.correct}
-          ❌ ${t.wrong}
-          ➖ ${t.neutral}
-          ⭯ ${t.reset}<br>
-          <strong class="${profitClass}">
-            Profit: ${t.profit.toFixed(2)} €
-          </strong>
-        </div>
-      `;
+    for (const type in totalByType) {
+      html += renderTypeRow(type, totalByType[type]);
+    }
+
+    /* ============================
+       EXAKTE LIGA (kompakt)
+    ============================ */
+    html += `<strong style="margin-top:10px; display:block;">${countryKey}</strong>`;
+
+    for (const type in exact) {
+      html += renderTypeRow(type, exact[type]);
     }
 
     box.innerHTML = html;
     container.appendChild(box);
   }
 }
+
+
+/* ============================
+   KOMPAKTE EIN-ZEILEN-DARSTELLUNG
+============================ */
+function renderTypeRow(type, t) {
+  const profitClass = getProfitClass(t.profit);
+
+  return `
+    <div class="tip-row">
+      <div class="type">${type}</div>
+      <div class="stats">
+        <span>✔️ ${t.correct}</span>
+        <span>❌ ${t.wrong}</span>
+        <span>➖ ${t.neutral}</span>
+        <span>⭯ ${t.reset}</span>
+      </div>
+      <div class="profit ${profitClass}">
+        ${t.profit.toFixed(2)} €
+      </div>
+    </div>
+  `;
+}
+
+
+/* ============================
+   AGGREGATION PRO LAND & TYP
+============================ */
+function aggregateCountryByType(data, baseCountry) {
+  const result = {};
+
+  for (const key in data) {
+    if (!key.startsWith(baseCountry)) continue;
+
+    const countryEntry = data[key];
+    for (const type in countryEntry) {
+      const t = countryEntry[type];
+
+      if (!result[type]) {
+        result[type] = { correct: 0, wrong: 0, neutral: 0, reset: 0, profit: 0 };
+      }
+
+      result[type].correct += t.correct;
+      result[type].wrong += t.wrong;
+      result[type].neutral += t.neutral;
+      result[type].reset += t.reset;
+      result[type].profit += t.profit;
+    }
+  }
+
+  return result;
+}
+
+
+/* ============================
+   PROFIT-FARBKLASSEN
+============================ */
+function getProfitClass(value) {
+  if (value > 0) return "profit-positive";
+  if (value < 0) return "profit-negative";
+  return "profit-neutral";
+}
+
+
+
 
 
 /* ============================
@@ -1602,7 +1768,9 @@ function renderEntries() {
 
     const div = document.createElement("div");
     div.className = "entry";
-    div.dataset.entryId = ei;         // ✅ wir benutzen den Index
+    div.id = `entry-${entry.id}`;     // ⭐ DIESE ZEILE MUSS REIN
+    div.dataset.entryId = entry.id;   // ⭐ Index ersetzen durch echte ID
+
 
 
     /* ⭐ Profitbox */
@@ -1639,7 +1807,7 @@ function renderEntries() {
     /* --- STATUS --- */
     const status = document.createElement("span");
     status.className = "header-status";
-    status.id = `header-status-${ei}`;
+    status.id = `header-status-${entry.id}`;
     header.appendChild(status);
 
     /* --- COUNTRY / TIPPSTER --- */
@@ -1676,7 +1844,7 @@ function renderEntries() {
     /* --- CHECKMARK --- */
     const check = document.createElement("span");
     check.className = "header-check";
-    check.id = `header-check-${ei}`;
+    check.id = `header-check-${entry.id}`;
     header.appendChild(check);
 
     /* --- TOGGLE ARROW --- */
@@ -2312,42 +2480,45 @@ content.querySelectorAll(".btn-sub-reset").forEach(btn => {
     updateAmpeln();
   };
 
-  function updateExtraTotalSingle() {
-    const einsatz = parseFloat(extra.einsatz || 0);
-    let total = 0;
 
-    const quote = parseFloat(extra.quoteGesamt || 0);
-    const anyColor = entry.tips.find(
-      (t) => t.color && t.color !== "reset"
-    );
+function updateExtraTotalSingle() {
+  const einsatz = parseFloat(extra.einsatz || 0);
+  let total = 0;
 
-    if (anyColor) {
-      if (anyColor.color === "correct")
-        total += quote * einsatz - einsatz;
-      else if (anyColor.color === "wrong") total -= einsatz;
-    }
+  const quote = parseFloat(extra.quoteGesamt || 0);
+  const anyColor = entry.tips.find(t => t.color && t.color !== "reset");
 
-    entry.blockProfit = total;
-
-    totalBox.textContent = total.toFixed(2) + " €";
-    totalBox.style.backgroundColor =
-      total > 0 ? "#c8ffcc" : total < 0 ? "#ffcccc" : "#ddd";
-
-    const entryBlock = document.querySelectorAll(".entry")[ei];
-
-    if (entryBlock) {
-      if (total > 0) {
-        entryBlock.style.border = "3px solid #4CAF50";
-        entryBlock.style.backgroundColor = "#e8ffe8";
-      } else if (total < 0) {
-        entryBlock.style.border = "3px solid #F44336";
-        entryBlock.style.backgroundColor = "#ffe5e5";
-      } else {
-        entryBlock.style.border = "1px solid #ccc";
-        entryBlock.style.backgroundColor = "white";
-      }
+  if (anyColor) {
+    if (anyColor.color === "correct") {
+      total += quote * einsatz - einsatz;
+    } else if (anyColor.color === "wrong") {
+      total -= einsatz;
     }
   }
+
+  entry.blockProfit = total;
+
+  totalBox.textContent = total.toFixed(2) + " €";
+  totalBox.style.backgroundColor =
+    total > 0 ? "#c8ffcc" : total < 0 ? "#ffcccc" : "#ddd";
+
+  // ⭐ ID-basierter Zugriff statt Index
+  const entryBlock = document.getElementById(`entry-${entry.id}`);
+
+  if (entryBlock) {
+    if (total > 0) {
+      entryBlock.style.border = "3px solid #4CAF50";
+      entryBlock.style.backgroundColor = "#e8ffe8";
+    } else if (total < 0) {
+      entryBlock.style.border = "3px solid #F44336";
+      entryBlock.style.backgroundColor = "#ffe5e5";
+    } else {
+      entryBlock.style.border = "1px solid #ccc";
+      entryBlock.style.backgroundColor = "white";
+    }
+  }
+}
+
 
   updateExtraTotalSingle();
 
@@ -2381,7 +2552,7 @@ content.querySelectorAll(".btn-sub-reset").forEach(btn => {
       totalBox.style.backgroundColor =
         total > 0 ? "#c8ffcc" : total < 0 ? "#ffcccc" : "#ddd";
 
-      updateEntryBorder(ei);
+      updateEntryBorder(entry.id);
     }
 
     entry.tips.forEach((tip, ti) => {
@@ -2744,10 +2915,11 @@ document.getElementById("confirmSaveName").onclick = async () => {
        pendingEdits → currentEntries übernehmen
        (Team1, Team2, Match sauber aktualisieren)
     ============================================================ */
-    for (const entryId in pendingEdits) {
+      for (const entryId in pendingEdits) {
       const changes = pendingEdits[entryId];
-      const entryIndex = parseInt(entryId);
-      const entry = currentEntries[entryIndex];
+
+      // ⭐ Eintrag über ID finden (nicht über Index!)
+      const entry = currentEntries.find(e => e.id === entryId);
       if (!entry) continue;
 
       /* -----------------------------
@@ -3222,26 +3394,21 @@ function parseBetInput(text) {
 // Parser für einzelne Buchmacher
 // -------------------------
 
-const SPORT_KEYWORDS = {
-  football: ["fußball", "football", "soccer", "bundesliga", "premier league", "laliga", "serie a", "ligue 1"],
-  americanfootball: ["american football", "nfl"],
-  baseball: ["baseball", "mlb"],
-  tennis: ["tennis", "atp", "wta", "grand slam", "satz", "tiebreak"],
-  basketball: ["basketball", "nba", "euroleague"],
-  handball: ["handball", "hbl"],
-  icehockey: ["eishockey", "nhl", "del"],
-  darts: ["darts", "pdc"],
-  formula1: ["formel 1", "formula 1", "f1"],
-};
+function detectSportFromRaw(text) {
+  const t = text.toLowerCase();
 
-function detectSport(text) {
-  const lower = text.toLowerCase();
-
-  for (const sport in SPORT_KEYWORDS) {
-    if (SPORT_KEYWORDS[sport].some(keyword => lower.includes(keyword))) {
-      return sport;
-    }
-  }
+  if (t.includes("basketball") || t.includes("nba")) return "basketball";
+  if (t.includes("fußball") || t.includes("fussball") || t.includes("football")) return "football";
+  if (t.includes("tennis")) return "tennis";
+  if (t.includes("baseball")) return "baseball";
+  if (t.includes("eishockey") || t.includes("hockey")) return "icehockey";
+  if (t.includes("volleyball")) return "volleyball";
+  if (t.includes("handball")) return "handball";
+  if (t.includes("mma")) return "mma";
+  if (t.includes("boxen") || t.includes("boxing")) return "boxing";
+  if (t.includes("cs2") || t.includes("counter strike")) return "esports";
+  if (t.includes("dota2")) return "esports";
+  if (t.includes("lol") || t.includes("league of legends")) return "esports";
 
   return "unknown";
 }
@@ -3649,8 +3816,7 @@ function parse22betSingle(text) {
   // SPORTART erkennen
   // ============================
   
- const sport = detectSport(lines.join(" ").toLowerCase());
-
+ const sport = detectSportFromRaw(text);
 
   // ============================
   // RETURN
@@ -3859,7 +4025,7 @@ function parse22betCombo(text) {
   });
 
   // Sportart erkennen (einmal pro Schein, nicht pro Block)
-  const sport = detectSport(lines.join(" ").toLowerCase());
+  const sport = detectSportFromRaw(text);
 
   return {
     bookmaker: "22bet",
@@ -4006,9 +4172,13 @@ function normalizeCountry(country) {
 
 
 
-function updateEntryBorder(ei) {
-  const entryBlock = document.querySelectorAll(".entry")[ei];
-  const entry = currentEntries[ei];
+function updateEntryBorder(entryId) {
+  const entry = currentEntries.find(e => e.id === entryId);
+  if (!entry) return;
+
+  const entryBlock = document.getElementById(`entry-${entryId}`);
+  if (!entryBlock) return;
+
 
   if (!entryBlock) return;
 
