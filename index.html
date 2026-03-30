@@ -340,6 +340,15 @@ select {
 .header-status {
   width: 90px;
   text-align: left;
+  white-space: nowrap;
+}
+
+.header-status,
+.countdown-warning,
+.countdown-running,
+.countdown-finished,
+.countdown-blink {
+  white-space: nowrap;
 }
 
 .header-country {
@@ -567,6 +576,35 @@ select {
   font-weight: 600;
 }
 
+.country-edit-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.country-suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid #ccc;
+  border-top: none;
+  z-index: 9999;
+  max-height: 200px;
+  overflow-y: auto;
+  display: none;
+}
+
+.country-suggestions .suggestion-item {
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.country-suggestions .suggestion-item:hover {
+  background: #eee;
+}
+
+
 
   </style>
 </head>
@@ -783,7 +821,32 @@ select {
   </div>
 </div>
 
+<!-- ============================
+     Land bearbeiten Overlay
+============================= -->
 
+<div id="countryEditOverlay" class="overlay" style="display:none;">
+  <div class="overlay-content">
+
+    <h2>Land bearbeiten</h2>
+
+    <div class="country-edit-wrapper">
+      <input 
+        type="text" 
+        id="editCountryInput" 
+        class="edit-country-input"
+        placeholder="Land / Liga eingeben..."
+      >
+      <div id="countrySuggestions" class="country-suggestions"></div>
+    </div>
+
+    <div class="overlay-buttons">
+      <button id="saveCountryEdit">Speichern</button>
+      <button id="cancelCountryEdit">Abbrechen</button>
+    </div>
+
+  </div>
+</div>
 
 
 <script>
@@ -799,7 +862,7 @@ let lastLoadedDay = null;
 let showLaendertipps = true;      // Filter: Ländertipps anzeigen
 let showZusatztipps = true;       // Filter: Zusatztipps anzeigen
 let pendingBet365 = null;
-
+let allCountries = [];
 
 
 /* Sportarten Icons */
@@ -846,6 +909,32 @@ function autoShrinkText(el, minSize = 10) {
     el.style.fontSize = size + "px";
   }
 }
+
+/* ============================
+   Alle Länder und Ligen in eine Liste holen
+============================ */
+
+async function loadAllCountryNames() {
+  const ref = rtdb.ref("days");
+  const snap = await ref.once("value");
+
+  const set = new Set();
+
+  snap.forEach(daySnap => {
+    const dayData = daySnap.val();
+    if (!dayData || !dayData.entries) return;
+
+    Object.values(dayData.entries).forEach(entry => {
+      if (entry.country && typeof entry.country === "string") {
+        set.add(entry.country.trim());
+      }
+    });
+  });
+
+  allCountries = Array.from(set);
+  console.log("All countries for autocomplete:", allCountries);
+}
+
 
 /* ============================
    Sportarten Dropdown
@@ -985,26 +1074,20 @@ function sortEntries() {
 }
 
 
-/* ⭐ ORIGINALER COUNTDOWN — UNVERÄNDERT */
-function updateCountdowns() {
-  if (isTimePickerOpen) return;
+  /* ⭐ ORIGINALER COUNTDOWN — UNVERÄNDERT */
+  function updateCountdowns() {
+    if (isTimePickerOpen) return;
 
-  const now = new Date();
+    const now = new Date();
 
-  const loadedDate = loadedDay ? new Date(loadedDay + "T00:00:00") : null;
-  const todayDate = new Date(today() + "T00:00:00");
+    const loadedDate = loadedDay ? new Date(loadedDay + "T00:00:00") : null;
+    const todayDate = new Date(today() + "T00:00:00");
 
-  currentEntries.forEach((entry, index) => {
-    const cd = document.getElementById("countdown-" + index);
+    currentEntries.forEach((entry) => {
+    const cd = document.getElementById("header-status-" + entry.id);
     if (!cd) return;
 
-    // Erstmal alle Klassen entfernen
     cd.classList.remove("countdown-warning", "countdown-running", "countdown-finished", "countdown-blink");
-
-    const hs = document.getElementById("header-status-" + index);
-    if (hs) {
-      hs.classList.remove("countdown-warning", "countdown-running", "countdown-finished", "countdown-blink");
-    }
 
     if (!entry.time) {
       cd.textContent = "Keine Uhrzeit gesetzt";
@@ -1013,7 +1096,6 @@ function updateCountdowns() {
 
     const target = new Date(loadedDay + "T" + entry.time + ":00");
 
-    // Vergangener Tag → sofort beendet
     if (loadedDate < todayDate) {
       cd.textContent = "Beendet";
       cd.classList.add("countdown-finished");
@@ -1029,49 +1111,39 @@ function updateCountdowns() {
 
       cd.textContent = `Start in ${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
 
-      // ⭐ Unter 15 Minuten → rot
-      if (diff < 15 * 60 * 1000) {
-        cd.classList.add("countdown-warning");
-        if (hs) hs.classList.add("countdown-warning");
-      }
-
-      // ⭐ Unter 5 Minuten → blinkend
-      if (diff < 5 * 60 * 1000) {
-        cd.classList.add("countdown-blink");
-        if (hs) hs.classList.add("countdown-blink");
-      }
+      if (diff < 15 * 60 * 1000) cd.classList.add("countdown-warning");
+      if (diff < 5 * 60 * 1000) cd.classList.add("countdown-blink");
 
     } else {
       diff = Math.abs(diff);
       const minutes = Math.floor(diff / 60000);
 
       if (minutes < 110) {
-        cd.textContent = "im Gange";
+        cd.textContent = "Im Gange";
         cd.classList.add("countdown-running");
-        if (hs) hs.classList.add("countdown-running");
-
       } else {
         cd.textContent = "Beendet";
         cd.classList.add("countdown-finished");
-        if (hs) hs.classList.add("countdown-finished");
       }
     }
   });
 
-  // Header-Status aktualisieren
-  currentEntries.forEach((entry, index) => {
-    const hs = document.getElementById("header-status-" + index);
-    if (hs) hs.textContent = getHeaderStatus(entry);
-  });
+    // Header-Status aktualisieren
+    currentEntries.forEach((entry) => {
+      const hs = document.getElementById("header-status-" + entry.id);
+      if (hs) hs.textContent = getHeaderStatus(entry);
+    });
 
-  // Haken aktualisieren
-  currentEntries.forEach((entry, index) => {
-    const checkEl = document.getElementById("header-check-" + index);
-    if (checkEl) {
-      checkEl.textContent = isEntryComplete(entry) ? "✔️" : "";
-    }
-  });
-}
+
+    // Haken aktualisieren
+    currentEntries.forEach((entry) => {
+      const checkEl = document.getElementById("header-check-" + entry.id);
+      if (checkEl) {
+        checkEl.textContent = isEntryComplete(entry) ? "✔️" : "";
+      }
+    });
+
+  }
 
 
 /* ============================
@@ -1769,7 +1841,7 @@ function renderEntries() {
     const div = document.createElement("div");
     div.className = "entry";
     div.id = `entry-${entry.id}`;     // ⭐ DIESE ZEILE MUSS REIN
-    div.dataset.entryId = entry.id;   // ⭐ Index ersetzen durch echte ID
+    div.dataset.entryId = entry.id;
 
 
 
@@ -2006,15 +2078,15 @@ function renderEntries() {
 
       </span>
 
-      <span class="edit-country" data-id="${ei}">✏️</span>
+      <span class="edit-country" data-id="${entry.id}">✏️</span>
 
       ${
         entry.country === "Zusatztipp"
-          ? `<span class="delete-entry" data-id="${ei}" style="cursor:pointer; margin-left:6px;">🗑️</span>`
+          ? `<span class="delete-entry" data-id="${entry.id}" style="cursor:pointer; margin-left:6px;">🗑️</span>`
           : ""
       }
 
-      <span class="info-country" data-id="${ei}">ℹ️</span>
+      <span class="info-country" data-id="${entry.id}">ℹ️</span>
     `;
     content.appendChild(h2);
 
@@ -2025,14 +2097,11 @@ function renderEntries() {
 
     newEditBtn.onclick = () => {
       if (entry.country === "Zusatztipp") {
-        editExtraTip(entry, ei);
+        editExtraTip(entry, entry.id);
         return;
       }
-      const newCountry = prompt("Neues Land:", entry.country);
-      if (newCountry?.trim()) {
-        entry.country = normalizeCountry(newCountry);
-        refreshUI();
-      }
+
+      openCountryEditOverlay(entry);
     };
 
     /* ⭐ Info-Button */
@@ -2072,10 +2141,14 @@ function renderEntries() {
     if (delBtn) {
       delBtn.onclick = () => {
         if (!confirm("Willst du diesen Zusatztipp wirklich löschen?")) return;
-        currentEntries.splice(ei, 1);
+
+        const index = currentEntries.findIndex(e => e.id === entry.id);
+        if (index !== -1) currentEntries.splice(index, 1);
+
         refreshUI();
       };
     }
+
 
     /* ⭐ Spielpaarung */
     if (entry.country !== "Zusatztipp") {
@@ -2095,7 +2168,7 @@ if (entry.country === "Zusatztipp") {
 
   const row = document.createElement("div");
   row.className = "tip-row";
-  row.dataset.entryIndex = ei;
+  row.dataset.entryId = entry.id;
 
   row.style.display = "grid";
   row.style.gridTemplateColumns =
@@ -2208,11 +2281,12 @@ if (entry.country === "Zusatztipp") {
         totalBox.textContent = "0.00 €";
         totalBox.style.backgroundColor = "#ddd";
 
-        // Header-Haken entfernen
-        const check = document.querySelector(`#header-check-${ei}`);
+        // Header-Haken entfernen (stabile ID)
+        const check = document.querySelector(`#header-check-${entry.id}`);
         if (check) check.textContent = "";
 
-        return; // WICHTIG: Rest nicht mehr ausführen
+        // Rest nicht mehr ausführen
+        return;
       }
 
       // ⭐ Normale Kombi-Status-Logik
@@ -2455,7 +2529,7 @@ content.querySelectorAll(".btn-sub-reset").forEach(btn => {
     row.classList.remove("tip-correct", "tip-wrong");
     row.classList.add("tip-neutral");
 
-    document.getElementById(`header-check-${ei}`).textContent = "✔️";
+    document.getElementById(`header-check-${entry.id}`).textContent = "✔️";
 
     updateExtraTotalSingle();
     updateDayTotal();
@@ -2502,7 +2576,6 @@ function updateExtraTotalSingle() {
   totalBox.style.backgroundColor =
     total > 0 ? "#c8ffcc" : total < 0 ? "#ffcccc" : "#ddd";
 
-  // ⭐ ID-basierter Zugriff statt Index
   const entryBlock = document.getElementById(`entry-${entry.id}`);
 
   if (entryBlock) {
@@ -2558,7 +2631,7 @@ function updateExtraTotalSingle() {
     entry.tips.forEach((tip, ti) => {
       const row = document.createElement("div");
       row.className = "tip-row";
-      row.dataset.entryIndex = ei;
+      row.dataset.entryId = entry.id;
       row.dataset.tipIndex = ti;
 
       if (tip.favorite) row.classList.add("tip-favorite");
@@ -2683,8 +2756,9 @@ function updateExtraTotalSingle() {
         tip.color = "neutral"; // Rückgabe
         updateTipRowBackground(tip, row);
 
-        document.getElementById(`header-check-${ei}`).textContent =
-          isEntryComplete(entry) ? "✔️" : "";
+        document.getElementById(`header-check-${entry.id}`).textContent =
+        isEntryComplete(entry) ? "✔️" : "";
+
 
         updateProfit();
         updateTotal();
@@ -2702,7 +2776,7 @@ function updateExtraTotalSingle() {
 
         profitDisplay.textContent = "";
 
-        document.getElementById(`header-check-${ei}`).textContent =
+        document.getElementById(`header-check-${entry.id}`).textContent =
           isEntryComplete(entry) ? "✔️" : "";
 
         updateTotal();
@@ -2918,7 +2992,6 @@ document.getElementById("confirmSaveName").onclick = async () => {
       for (const entryId in pendingEdits) {
       const changes = pendingEdits[entryId];
 
-      // ⭐ Eintrag über ID finden (nicht über Index!)
       const entry = currentEntries.find(e => e.id === entryId);
       if (!entry) continue;
 
@@ -2990,8 +3063,8 @@ document.getElementById("loadDay").onclick = async () => {
         select.appendChild(opt);
       });
 
-      const days = Object.keys(snap.val() || {}).sort();
-const lastDay = days[days.length - 1];
+  const days = Object.keys(snap.val() || {}).sort();
+  const lastDay = days[days.length - 1];
 
 if (lastDay) {
   select.value = lastDay;
@@ -3079,6 +3152,9 @@ globalCountryStats = await calculateGlobalCountryStats();
 refreshUI();
 updateAmpeln();
 
+// ⭐ Alle Country-Namen aus allen Tagen laden (für Autocomplete)
+await loadAllCountryNames();
+
     } else {
       alert("Keine Daten für diesen Tag gefunden.");
     }
@@ -3157,12 +3233,16 @@ document.getElementById("closeStats").onclick = () => {
    GesamtBilanz
 ============================ */
 document.getElementById("btnCountryStats").onclick = async () => {
+  // ⭐ Suchfeld leeren
+  document.getElementById("countrySearch").value = "";
+
   const stats = await calculateGlobalCountryStats();
   console.log("Global Stats:", stats);
   renderCountryStats(stats);
 
   document.getElementById("countryStatsOverlay").style.display = "flex";
 };
+
 
 
 function filterCountryStats(search) {
@@ -3191,15 +3271,18 @@ document.getElementById("closeCountryStats").onclick = () => {
 ============================ */
 setInterval(updateCountdowns, 1000);
 
-
 function updateAmpeln() {
   document.querySelectorAll(".tip-row").forEach((row) => {
-    const entryIndex = parseInt(row.dataset.entryIndex);
-    const tipIndex = parseInt(row.dataset.tipIndex);
-    if (isNaN(tipIndex)) return;
 
-    const entry = currentEntries[entryIndex];
+    const entryId = row.dataset.entryId;
+    const tipIndex = parseInt(row.dataset.tipIndex);
+    if (!entryId || isNaN(tipIndex)) return;
+
+    const entry = currentEntries.find(e => e.id == entryId);
+    if (!entry) return;
+
     const tip = entry.tips[tipIndex];
+    if (!tip) return;
 
     if (entry.country === "Zusatztipp") return;
 
@@ -3214,7 +3297,7 @@ function updateAmpeln() {
 
     let color = "#ccc";
 
-    // ⭐ Jetzt globale Statistik statt Tagesstatistik
+    // ⭐ Globale Statistik
     if (globalCountryStats[country] && globalCountryStats[country][tipType]) {
       const profit = globalCountryStats[country][tipType].profit;
 
@@ -3231,12 +3314,13 @@ function updateAmpeln() {
 /* ============================
    ZUSATZTIPP LÖSCHEN
 ============================ */
-async function deleteExtraTip(entry, index) {
+async function deleteExtraTip(entry) {
   if (!loadedDay) return;
   if (!confirm("Willst du diesen Zusatztipp wirklich löschen?")) return;
 
-  // 1. Aus currentEntries entfernen
-  currentEntries.splice(index, 1);
+  // 1. Aus currentEntries entfernen (über stabile ID)
+  const index = currentEntries.findIndex(e => e.id === entry.id);
+  if (index !== -1) currentEntries.splice(index, 1);
 
   // 2. Aus RTDB löschen
   const ref = rtdb.ref(`days/${loadedDay}/zusatztipps`);
@@ -3258,6 +3342,7 @@ async function deleteExtraTip(entry, index) {
   updateExtraStats();
   updateCountryStats();
 }
+
 
 
 /* ============================
@@ -4131,13 +4216,17 @@ function bindDeleteButtons() {
     btn.onclick = async () => {
 
       const row = btn.closest(".tip-row");
-      const entryIndex = parseInt(row.dataset.entryIndex);
+      const entryId = row.dataset.entryId;
+      if (!entryId) return;
 
-      // ⭐ Eintrag sichern, bevor er gelöscht wird
-      const entry = currentEntries[entryIndex];
+      // ⭐ Eintrag über stabile ID finden
+      const index = currentEntries.findIndex(e => e.id == entryId);
+      if (index === -1) return;
+
+      const entry = currentEntries[index];
 
       // 1. Aus currentEntries löschen
-      currentEntries.splice(entryIndex, 1);
+      currentEntries.splice(index, 1);
 
       // 2. Aus RTDB löschen
       if (loadedDay && entry) {
@@ -4159,6 +4248,97 @@ function bindDeleteButtons() {
     };
   });
 }
+
+// ============================
+// Autocomplete-Funktionen Start
+// ============================
+
+let countryEditEntry = null;
+
+function openCountryEditOverlay(entry) {
+  countryEditEntry = entry;
+
+  const input = document.getElementById("editCountryInput");
+  input.value = entry.country || "";
+
+  updateCountrySuggestions(input.value);
+
+  document.getElementById("countryEditOverlay").style.display = "flex";
+}
+
+
+function updateCountrySuggestions(search) {
+  suggestionsBox.innerHTML = "";
+
+  if (!search) {
+    suggestionsBox.style.display = "none";
+    return;
+  }
+
+  const term = search.toLowerCase();
+
+  let suggestions = allCountries.filter(c =>
+    c.toLowerCase().includes(term)
+  );
+
+  suggestions = Array.from(new Set(suggestions)).slice(0, 20);
+
+  if (suggestions.length === 0) {
+    suggestionsBox.style.display = "none";
+    return;
+  }
+
+  suggestionsBox.style.display = "block";
+
+  suggestions.forEach(item => {
+    const div = document.createElement("div");
+    div.className = "suggestion-item";
+    div.textContent = item;
+
+    div.onclick = () => {
+      countryInput.value = item;
+      suggestionsBox.innerHTML = "";
+      suggestionsBox.style.display = "none";
+    };
+
+    suggestionsBox.appendChild(div);
+  });
+}
+
+
+document.getElementById("saveCountryEdit").onclick = () => {
+  const input = document.getElementById("editCountryInput");
+  const value = input.value.trim();
+
+  if (value) {
+    countryEditEntry.country = normalizeCountry(value);
+    refreshUI();
+  }
+
+  document.getElementById("countryEditOverlay").style.display = "none";
+};
+
+document.getElementById("cancelCountryEdit").onclick = () => {
+  document.getElementById("countryEditOverlay").style.display = "none";
+};
+
+const countryInput = document.getElementById("editCountryInput");
+const suggestionsBox = document.getElementById("countrySuggestions");
+
+countryInput.addEventListener("input", () => {
+  updateCountrySuggestions(countryInput.value.trim());
+});
+
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".country-edit-wrapper")) {
+    suggestionsBox.innerHTML = "";
+    suggestionsBox.style.display = "none";
+  }
+});
+
+// ============================
+// Autocomplete-Funktionen Ende
+// ============================
 
 function updateCountryUI() {
   const stats = updateCountryStats();   // Profit neu berechnen
