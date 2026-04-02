@@ -76,8 +76,8 @@ textarea {
    Globale Buttons
 ============================ */
 button {
-  font-size: 1.1rem;
-  padding: 12px 18px;
+  font-size: 1.2rem;
+  padding: 13px 20px;
   border-radius: 10px;
   border: none;
   cursor: pointer;
@@ -86,7 +86,8 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 48px;
+  min-height: 60px;
+  border: 2px solid rgba(0,0,0,0.15);
 }
 
 button:hover {
@@ -97,13 +98,43 @@ button:active {
   transform: scale(0.97);
 }
 
-/* Spezielle Buttons */
+/* ============================
+   Button-Farben
+============================ */
 .stats-button {
   background: #dff1ff;
 }
 
+.add-button {
+  background: #b7f2c2;
+}
+
 .stats-button:hover {
   background: #cfe8ff;
+}
+
+/* Schließen / Abbrechen */
+.btn-close {
+  background: #ffe5e5;          /* sanftes Rot */
+  border: 1px solid #ffcccc;    /* leichte rote Umrandung */
+  font-size: 3rem;
+  min-height: 80px;
+  min-width: 160px;
+}
+
+
+.btn-close:hover {
+  background: #ffd6d6;
+}
+
+/* Bestätigen / Speichern */
+.btn-confirm {
+  background: #e6ffe6;          /* sanftes Grün */
+  border: 1px solid #ccffcc;    /* leichte grüne Umrandung */
+}
+
+.btn-confirm:hover {
+  background: #d6ffd6;
 }
 
 /* ============================
@@ -112,7 +143,7 @@ button:active {
 .button-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 9px;
   margin-bottom: 15px;
   flex-wrap: wrap;
 }
@@ -170,11 +201,17 @@ button:active {
 }
 
 .overlay-button-row button {
-  min-width: 120px;
-  padding: 10px 16px;
-  font-size: 1.05rem;
-  border-radius: 8px;
+  min-width: 170px;      /* breiter */
+  padding: 16px 26px;    /* deutlich höher & breiter */
+  font-size: 1.3rem;     /* größere Schrift */
+  border-radius: 12px;   /* harmonisch rund */
+  font-weight: 600;
+  display: flex;               /* wichtig */
+  justify-content: center;     /* horizontal zentriert */
+  align-items: center;         /* vertikal zentriert */
+  text-align: center;          /* falls Text mehrzeilig wäre */
 }
+
 
 /* ============================
    Tipp-Elemente & Layout
@@ -223,11 +260,15 @@ button:active {
    Select-Felder
 ============================ */
 select {
-  font-size: 20px;
-  padding: 10px;
-  height: 45px;
-  min-width: 220px;
+  font-size: 22px;        /* größere Schrift */
+  padding: 14px 18px;     /* mehr Innenabstand */
+  height: 55px;           /* höhere Touch-Fläche */
+  min-width: 240px;       /* breiter für Finger */
+  border-radius: 10px;    /* harmonisch rund */
+  border: 1px solid rgba(0,0,0,0.15);
+  background: #f8f8f8;
 }
+
 
 /* ============================
    Countdown & Statusfarben
@@ -323,6 +364,89 @@ select {
   box-shadow: 0 6px 20px rgba(0,0,0,0.15);
 }
 
+#countryEditOverlay .overlay-content {
+  background: white;
+  padding: 28px;
+  border-radius: 14px;
+  width: 85%;
+  max-width: 420px;
+  text-align: center;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+}
+
+#countryEditOverlay h2 {
+  margin-bottom: 22px;
+  font-size: 1.8rem;
+  font-weight: 700;
+}
+
+#countryEditOverlay .search-input {
+  width: 100%;
+  font-size: 1.25rem;
+  padding: 16px 18px;
+  height: 60px;
+  border-radius: 12px;
+  border: 2px solid rgba(0,0,0,0.15);
+  background: #fafafa;
+  box-sizing: border-box;
+}
+
+#countryEditOverlay .btn-confirm,
+#countryEditOverlay .btn-close {
+  border-width: 2px;
+}
+
+#editMatchOverlay .overlay-box {
+  background: white;
+  padding: 28px;
+  border-radius: 14px;
+  width: 85%;
+  max-width: 420px;
+  text-align: center;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+}
+
+#editMatchOverlay h3 {
+  margin-bottom: 22px;
+  font-size: 1.8rem;
+  font-weight: 700;
+}
+
+#editMatchOverlay input {
+  width: 100%;
+  font-size: 1.25rem;
+  padding: 16px 18px;
+  height: 60px;
+  border-radius: 12px;
+  border: 2px solid rgba(0,0,0,0.15);
+  background: #fafafa;
+  box-sizing: border-box;
+  margin-bottom: 18px;
+}
+
+#editMatchOverlay .overlay-buttons {
+  margin-top: 25px;
+}
+
+#editMatchOverlay .overlay-button-row button {
+  min-width: 170px;
+  padding: 16px 26px;
+  font-size: 1.3rem;
+  border-radius: 12px;
+  font-weight: 600;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+#editMatchOverlay .btn-confirm,
+#editMatchOverlay .btn-close {
+  border-width: 2px;
+}
+
+
 
 .entry-header {
   display: flex;
@@ -333,12 +457,12 @@ select {
 
 
 .header-time {
-  width: 55px;
+  width: 35px;
   text-align: left;
 }
 
 .header-status {
-  width: 90px;
+  width: 100px;
   text-align: left;
   white-space: nowrap;
 }
@@ -358,14 +482,14 @@ select {
   text-overflow: ellipsis;
 }
 
-/* Länder kleiner */
+/* Länder */
 .header-country.is-country {
   font-size: 14px;
 }
 
-/* Tippster normal */
+/* Tippster */
 .header-country.is-tippster {
-  font-size: 18px;
+  font-size: 14px;
 }
 
 
@@ -438,6 +562,12 @@ select {
 
 .search-close-row .search-input {
   flex: 1;
+  font-size: 1.2rem;        /* größere Schrift */
+  padding: 14px 16px;       /* mehr Innenabstand */
+  height: 55px;             /* gleiche Höhe wie große Selects */
+  border-radius: 10px;      /* harmonisch rund */
+  border: 1px solid rgba(0,0,0,0.15); /* sanfte Umrandung */
+  box-sizing: border-box;   /* verhindert Layout-Sprünge */
 }
 
 .search-close-row .close-button {
@@ -615,26 +745,32 @@ select {
   <textarea id="textInput" placeholder="Hier deinen Text einfügen..."></textarea>
 
   <div class="button-row">
-    <button id="readButton">📄 Text einlesen</button>
-    <button id="btnTipster" class="stats-button">➕ Wette hinzufügen</button>
-    <button id="loadDay">📥 Laden</button>
+    <button id="readButton" class="add-button">📄 Tag einlesen</button>
+    <button id="btnTipster" class="add-button">➕ Wette hinzu</button>
+    <button id="loadDay">📥 Tag Laden</button>
     <button id="saveDay">💾 Speichern</button>
     <button id="deleteDay">🗑️ Tag löschen</button>
   </div>
 
   <div class="button-row">
-  <button id="showStats">📊 Statistik</button>
-  <button id="btnCountryStats" class="stats-button">🌍 Gesamtbilanz</button>
+    <button id="showStats" class="stats-button">📊 Statistik</button>
+    <button id="btnCountryStats" class="stats-button">🌍 Gesamtbilanz</button>
 
-  <label class="inline-check">
-    <input type="checkbox" id="chkShowLaender" checked>
-    Ländertipps
-  </label>
+    <label class="inline-check">
+      <input type="checkbox" id="chkShowLaender" checked>
+      Ländertipps
+    </label>
 
-  <label class="inline-check">
-    <input type="checkbox" id="chkShowZusatztipps" checked>
-    Zusatztipps
-  </label>
+    <label class="inline-check">
+      <input type="checkbox" id="chkShowZusatztipps" checked>
+      Zusatztipps
+    </label>
+
+    <label class="inline-check">
+      <input type="checkbox" id="chkShowUncheckedOnly">
+      Nur ohne Haken
+    </label>
+
   </div>
 
 
@@ -675,7 +811,7 @@ select {
     <p id="extraWrong">❌ Falsch: 0</p>
     <p id="extraProfit">💰 Profit: 0.00 €</p>
 
-    <button id="closeStats">Schließen</button>
+    <button id="closeStats"  class="btn-close">Schließen</button>
   </div>
 </div>
 
@@ -686,8 +822,8 @@ select {
       <h2>Gespeicherte Tage</h2>
       <select id="daySelect"></select>
         <div class="overlay-button-row">
-          <button id="loadSelectedDay">Laden</button>
-          <button id="closeLoad">Schließen</button>
+          <button id="loadSelectedDay" class="btn-confirm">Laden</button>
+          <button id="closeLoad" class="btn-close">Schließen</button>
         </div>
     </div>
   </div>
@@ -698,8 +834,8 @@ select {
       <h2>Tag löschen</h2>
       <select id="deleteSelect"></select>
       <div class="overlay-button-row">
-        <button id="deleteSelectedDay">Löschen</button>
-        <button id="closeDelete">Schließen</button>
+        <button id="deleteSelectedDay" class="btn-confirm">Löschen</button>
+        <button id="closeDelete" class="btn-close">Schließen</button>
       </div>
     </div>
   </div>
@@ -710,8 +846,8 @@ select {
       <h2>Speichern unter …</h2>
       <input id="saveNameInput" type="text" style="width:90%; padding:10px; font-size:18px; margin-bottom:15px;" />
       <div class="overlay-button-row">
-        <button id="confirmSaveName">Speichern</button>
-        <button id="cancelSaveName">Abbrechen</button>
+        <button id="confirmSaveName" class="btn-confirm">Speichern</button>
+        <button id="cancelSaveName" class="btn-close">Abbrechen</button>
       </div>
     </div>
   </div>
@@ -746,7 +882,7 @@ select {
   <div class="overlay-box">
     <h2 id="daysForCountryTitle"></h2>
     <div id="daysForCountryList"></div>
-    <button id="closeDaysForCountry">Schließen</button>
+    <button id="closeDaysForCountry" class="btn-close">Schließen</button>
   </div>
 </div>
 
@@ -764,23 +900,12 @@ select {
 
     <h3>Tippster auswählen:</h3>
 
-<select id="tipsterSelect" style="width:100%; padding:10px; font-size:18px; margin-bottom:15px;">
-</select>
-
-<button id="btnTipsterImport" style="
-  width:100%;
-  padding:12px;
-  background:#4CAF50;
-  color:white;
-  border:none;
-  border-radius:6px;
-  font-size:18px;
-  cursor:pointer;
-">
-  Einlesen
-</button>
-
-    <button id="closeTipster" class="close-button">Schließen</button>
+    <select id="tipsterSelect" style="width:100%; padding:10px; font-size:18px; margin-bottom:15px;">
+    </select>
+      <div class="overlay-button-row">
+        <button id="btnTipsterImport" class="btn-confirm">Einlesen</button>
+        <button id="closeTipster" class="btn-close">Schließen</button>
+      </div>
   </div>
 </div>
 
@@ -794,8 +919,8 @@ select {
     <input id="editTippsterInput" type="text" style="width:100%; padding:8px; margin-top:10px;">
 
       <div class="overlay-button-row">
-        <button id="cancelTippsterEdit">Abbrechen</button>
-        <button id="saveTippster">Speichern</button>
+        <button id="cancelTippsterEdit" class="btn-close">Abbrechen</button>
+        <button id="saveTippster" class="btn-confirm">Speichern</button>
       </div>
   </div>
 </div>
@@ -814,8 +939,8 @@ select {
 
     <div class="overlay-buttons">
       <div class="overlay-button-row">
-      <button id="editMatchCancel" class="btn-cancel">Abbrechen</button>
-      <button id="editMatchSave" class="btn-save">Speichern</button>
+      <button id="editMatchCancel" class="btn-close">Abbrechen</button>
+      <button id="editMatchSave" class="btn-confirm">Speichern</button>
       </div>
     </div>
   </div>
@@ -834,15 +959,17 @@ select {
       <input 
         type="text" 
         id="editCountryInput" 
-        class="edit-country-input"
+        class="search-input"
         placeholder="Land / Liga eingeben..."
       >
       <div id="countrySuggestions" class="country-suggestions"></div>
     </div>
 
     <div class="overlay-buttons">
-      <button id="saveCountryEdit">Speichern</button>
-      <button id="cancelCountryEdit">Abbrechen</button>
+      <div class="overlay-button-row">
+        <button id="saveCountryEdit" class="btn-confirm">Speichern</button>
+        <button id="cancelCountryEdit" class="btn-close">Abbrechen</button>
+      </div>
     </div>
 
   </div>
@@ -863,6 +990,7 @@ let showLaendertipps = true;      // Filter: Ländertipps anzeigen
 let showZusatztipps = true;       // Filter: Zusatztipps anzeigen
 let pendingBet365 = null;
 let allCountries = [];
+let showUncheckedOnly = false;
 
 
 /* Sportarten Icons */
@@ -1107,10 +1235,17 @@ function sortEntries() {
     if (diff > 0) {
       const h = Math.floor(diff / 3600000);
       const m = Math.floor((diff % 3600000) / 60000);
-      const s = Math.floor((diff % 60000) / 1000);
 
-      cd.textContent = `Start in ${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+      // Weniger als 1 Stunde → nur Minuten anzeigen
+      if (h === 0) {
+        cd.textContent = `Start in ${m}m`;
+      } 
+      // 1 Stunde oder mehr → HH:MM
+      else {
+        cd.textContent = `Start in ${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`;
+      }
 
+      // Farben / Warnungen
       if (diff < 15 * 60 * 1000) cd.classList.add("countdown-warning");
       if (diff < 5 * 60 * 1000) cd.classList.add("countdown-blink");
 
@@ -1139,7 +1274,11 @@ function sortEntries() {
     currentEntries.forEach((entry) => {
       const checkEl = document.getElementById("header-check-" + entry.id);
       if (checkEl) {
-        checkEl.textContent = isEntryComplete(entry) ? "✔️" : "";
+        const checked = isEntryComplete(entry);
+        checkEl.textContent = checked ? "✔️" : "";
+
+        // wichtig für den Filter
+        entry.headerChecked = checked;
       }
     });
 
@@ -1838,6 +1977,9 @@ function renderEntries() {
     // 3. FILTER: Zusatztipps ausblenden
     if (!showZusatztipps && entry.country === "Zusatztipp") return;
 
+    // 4. FILTER: Nur Tipps anzeigen, deren Header KEINEN Haken hat
+    if (showUncheckedOnly && entry.headerChecked) return;
+
     const div = document.createElement("div");
     div.className = "entry";
     div.id = `entry-${entry.id}`;     // ⭐ DIESE ZEILE MUSS REIN
@@ -1888,13 +2030,18 @@ function renderEntries() {
 
     if (entry.country === "Zusatztipp") {
         country.classList.add("is-tippster");
-        country.textContent = entry.extra?.tippster || "Zusatztipp";
+
+        const symbol = "👤"; // ← dein gewünschtes Symbol
+        const name = entry.extra?.tippster || "Zusatztipp";
+
+        country.textContent = `${symbol} ${name}`;
     } else {
         country.classList.add("is-country");
         country.textContent = normalizeCountry(entry.country);
     }
 
     header.appendChild(country);
+
 
 
     /* --- MATCH TEXT --- */
@@ -3398,6 +3545,13 @@ document.getElementById("chkShowZusatztipps").onchange = (e) => {
   showZusatztipps = e.target.checked;
   refreshUI();
 };
+
+// ⭐ Checkbox: Tipps mit Haken anzeigen/ausblenden
+document.getElementById("chkShowUncheckedOnly").addEventListener("change", (e) => {
+  showUncheckedOnly = e.target.checked;
+  renderEntries();
+});
+
 
 /* ============================
    PARSER START
